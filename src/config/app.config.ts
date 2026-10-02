@@ -12,6 +12,10 @@ export default () => ({
     process.env.COOKIE_SECURE === undefined
       ? process.env.NODE_ENV === 'production'
       : process.env.COOKIE_SECURE === 'true',
-  cookieSameSite: process.env.COOKIE_SAME_SITE || 'strict',
+  cookieSameSite: process.env.COOKIE_SAME_SITE || 'lax',
+  refreshTokenTtlMs: parseInt(
+    process.env.REFRESH_TOKEN_TTL_MS || '1209600000',
+    10,
+  ),
   databaseUrl: process.env.DATABASE_URL,
 });

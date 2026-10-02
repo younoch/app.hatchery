@@ -18,7 +18,7 @@ import { AuthService } from './auth.service';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { REFRESH_TOKEN_TTL_MS } from './auth.constants';
+import { REFRESH_COOKIE_NAME, REFRESH_COOKIE_PATH } from './auth.constants';
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -44,7 +44,7 @@ export class AuthController {
   ) {
     const tokens = await this.authService.login(dto.email, dto.password);
     response.cookie(
-      'refresh_token',
+      REFRESH_COOKIE_NAME,
       tokens.refresh_token,
       this.refreshCookieOptions(),
     );
@@ -72,14 +72,14 @@ export class AuthController {
   ) {
     const refreshToken = (
       request.cookies as unknown as Record<string, unknown> | undefined
-    )?.refresh_token;
+    )?.[REFRESH_COOKIE_NAME];
     if (typeof refreshToken !== 'string' || !refreshToken) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     const tokens = await this.authService.refresh(refreshToken);
     response.cookie(
-      'refresh_token',
+      REFRESH_COOKIE_NAME,
       tokens.refresh_token,
       this.refreshCookieOptions(),
     );
@@ -95,14 +95,24 @@ export class AuthController {
   ) {
     const refreshToken = (
       request.cookies as unknown as Record<string, unknown> | undefined
-    )?.refresh_token;
+    )?.[REFRESH_COOKIE_NAME];
     const result =
       typeof refreshToken === 'string' && refreshToken
         ? await this.authService.logout(refreshToken)
         : { message: 'Logged out successfully' };
 
-    response.clearCookie('refresh_token', this.refreshCookieOptions(false));
+    response.clearCookie(REFRESH_COOKIE_NAME, this.refreshCookieOptions(false));
     return result;
+  }
+
+  @Post('refresh/logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiCookieAuth('refresh-cookie')
+  logoutFromRefreshRoute(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.logout(request, response);
   }
 
   private refreshCookieOptions(includeMaxAge = true): CookieOptions {
@@ -110,10 +120,11 @@ export class AuthController {
       httpOnly: true,
       secure: this.configService.get<boolean>('cookieSecure') ?? false,
       sameSite:
-        this.configService.get<'strict' | 'lax' | 'none'>('cookieSameSite') ??
-        'strict',
-      path: '/auth',
-      ...(includeMaxAge ? { maxAge: REFRESH_TOKEN_TTL_MS } : {}),
+        this.configService.get<'lax' | 'none'>('cookieSameSite') ?? 'lax',
+      path: REFRESH_COOKIE_PATH,
+      ...(includeMaxAge
+        ? { maxAge: this.configService.get<number>('refreshTokenTtlMs') }
+        : {}),
     };
   }
 }

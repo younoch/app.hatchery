@@ -15,7 +15,6 @@ import { PasswordResetTokenRepository } from '@/common/repositories/password-res
 import { EmailService } from '@/common/email/email.service';
 import { ConfigService } from '@nestjs/config';
 import { RefreshTokenRepository } from '@/common/repositories/refresh-token.repository';
-import { REFRESH_TOKEN_TTL_MS } from './auth.constants';
 @Injectable()
 export class AuthService {
   constructor(
@@ -183,7 +182,8 @@ export class AuthService {
   private async issueRefreshToken(userId: string): Promise<string> {
     const rawToken = crypto.randomBytes(32).toString('base64url');
     const hashedToken = this.hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+    const ttlMs = this.configService.getOrThrow<number>('refreshTokenTtlMs');
+    const expiresAt = new Date(Date.now() + ttlMs);
 
     await this.refreshTokenRepository.create(userId, hashedToken, expiresAt);
     return rawToken;

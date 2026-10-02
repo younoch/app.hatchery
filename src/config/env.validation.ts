@@ -22,6 +22,10 @@ const envSchema = z
     FRONTEND_URL: z
       .string()
       .url('FRONTEND_URL must be a valid URL')
+      .refine(
+        (value) => !value.includes('*'),
+        'FRONTEND_URL cannot contain a wildcard',
+      )
       .default('http://localhost:3000'),
     CORS_ORIGINS: z
       .string()
@@ -32,12 +36,19 @@ const envSchema = z
           value
             .split(',')
             .every(
-              (origin) => z.string().url().safeParse(origin.trim()).success,
+              (origin) =>
+                !origin.includes('*') &&
+                z.string().url().safeParse(origin.trim()).success,
             ),
-        'CORS_ORIGINS must be a comma-separated list of valid URLs',
+        'CORS_ORIGINS must be a comma-separated list of explicit URLs without wildcards',
       ),
     COOKIE_SECURE: z.enum(['true', 'false']).optional(),
-    COOKIE_SAME_SITE: z.enum(['strict', 'lax', 'none']).default('strict'),
+    COOKIE_SAME_SITE: z.enum(['lax', 'none']).default('lax'),
+    REFRESH_TOKEN_TTL_MS: z
+      .string()
+      .default('1209600000')
+      .transform((val) => parseInt(val, 10))
+      .pipe(z.number().int().positive()),
 
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])

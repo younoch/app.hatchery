@@ -3,7 +3,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
-import { REFRESH_TOKEN_TTL_MS } from './auth.constants';
+import { REFRESH_COOKIE_NAME, REFRESH_COOKIE_PATH } from './auth.constants';
 
 jest.mock('./auth.service', () => ({
   AuthService: class AuthService {},
@@ -36,7 +36,12 @@ describe('AuthController', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: (key: string) => (key === 'cookieSecure' ? false : 'strict'),
+            get: (key: string) =>
+              ({
+                cookieSecure: false,
+                cookieSameSite: 'lax',
+                refreshTokenTtlMs: 1209600000,
+              })[key],
           },
         },
       ],
@@ -58,13 +63,17 @@ describe('AuthController', () => {
       response,
     );
 
-    expect(setCookie).toHaveBeenCalledWith('refresh_token', 'refresh-token', {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'strict',
-      path: '/auth',
-      maxAge: REFRESH_TOKEN_TTL_MS,
-    });
+    expect(setCookie).toHaveBeenCalledWith(
+      REFRESH_COOKIE_NAME,
+      'refresh-token',
+      {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        path: REFRESH_COOKIE_PATH,
+        maxAge: 1209600000,
+      },
+    );
     expect(result).toEqual({ access_token: 'access-token' });
   });
 
@@ -80,7 +89,12 @@ describe('AuthController', () => {
     expect(setCookie).toHaveBeenCalledWith(
       'refresh_token',
       'new-refresh-token',
-      expect.objectContaining({ httpOnly: true, path: '/auth' }),
+      expect.objectContaining({
+        httpOnly: true,
+        path: REFRESH_COOKIE_PATH,
+        sameSite: 'lax',
+        maxAge: 1209600000,
+      }),
     );
     expect(result).toEqual({ access_token: 'new-access-token' });
   });
@@ -104,8 +118,25 @@ describe('AuthController', () => {
     await controller.logout(request, response);
 
     expect(clearCookie).toHaveBeenCalledWith(
-      'refresh_token',
-      expect.objectContaining({ httpOnly: true, path: '/auth' }),
+      REFRESH_COOKIE_NAME,
+      expect.objectContaining({
+        httpOnly: true,
+        path: REFRESH_COOKIE_PATH,
+      }),
+    );
+  });
+
+  it('accepts logout through the refresh-cookie path', async () => {
+    const request = {
+      cookies: { [REFRESH_COOKIE_NAME]: 'refresh-token' },
+    } as unknown as Request;
+    const response = { clearCookie: jest.fn() } as unknown as Response;
+
+    await controller.logoutFromRefreshRoute(request, response);
+
+    expect(response.clearCookie).toHaveBeenCalledWith(
+      REFRESH_COOKIE_NAME,
+      expect.objectContaining({ path: REFRESH_COOKIE_PATH }),
     );
   });
 });

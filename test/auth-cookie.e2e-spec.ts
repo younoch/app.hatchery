@@ -43,7 +43,12 @@ describe('Auth refresh cookie (e2e)', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: (key: string) => (key === 'cookieSecure' ? false : 'strict'),
+            get: (key: string) =>
+              ({
+                cookieSecure: false,
+                cookieSameSite: 'lax',
+                refreshTokenTtlMs: 1209600000,
+              })[key],
           },
         },
       ],
@@ -69,8 +74,9 @@ describe('Auth refresh cookie (e2e)', () => {
 
     expect(login.body.data).toEqual({ access_token: 'access-token' });
     expect(login.headers['set-cookie'][0]).toMatch(/HttpOnly/i);
-    expect(login.headers['set-cookie'][0]).toMatch(/Path=\/auth/i);
-    expect(login.headers['set-cookie'][0]).toMatch(/Max-Age=2592000/i);
+    expect(login.headers['set-cookie'][0]).toMatch(/Path=\/auth\/refresh/i);
+    expect(login.headers['set-cookie'][0]).toMatch(/SameSite=Lax/i);
+    expect(login.headers['set-cookie'][0]).toMatch(/Max-Age=1209600/i);
 
     const refresh = await client.post('/auth/refresh').expect(201);
     expect(authService.refresh).toHaveBeenCalledWith('initial-refresh-token');
@@ -84,9 +90,9 @@ describe('Auth refresh cookie (e2e)', () => {
       .set('Cookie', 'refresh_token=initial-refresh-token')
       .expect(401);
 
-    const logout = await client.post('/auth/logout').expect(200);
+    const logout = await client.post('/auth/refresh/logout').expect(200);
     expect(authService.logout).toHaveBeenCalledWith('rotated-refresh-token');
     expect(logout.headers['set-cookie'][0]).toMatch(/Expires=/i);
-    expect(logout.headers['set-cookie'][0]).toMatch(/Path=\/auth/i);
+    expect(logout.headers['set-cookie'][0]).toMatch(/Path=\/auth\/refresh/i);
   });
 });

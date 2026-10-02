@@ -98,7 +98,8 @@ cp .env.example .env
 | `FRONTEND_URL` | — | `http://localhost:3000` | Default allowed browser origin |
 | `CORS_ORIGINS` | — | `FRONTEND_URL` | Comma-separated explicit allowed origins for credentialed CORS |
 | `COOKIE_SECURE` | — | `false` locally, `true` in production | Set to `true` for HTTPS; defaults to `true` when `NODE_ENV=production` |
-| `COOKIE_SAME_SITE` | — | `strict` | Cookie SameSite policy. Cross-subdomain deployments need `none` and `COOKIE_SECURE=true` |
+| `COOKIE_SAME_SITE` | — | `lax` | Use `lax` for same-site deployments; cross-site deployments need `none` and `COOKIE_SECURE=true` |
+| `REFRESH_TOKEN_TTL_MS` | — | `1209600000` | Refresh-token lifetime and refresh-cookie max-age in milliseconds (14 days by default) |
 | `LOG_LEVEL` | — | — | |
 | `THROTTLE_TTL` / `THROTTLE_LIMIT` | — | — | |
 | `PASSWORD_RESET_EXPIRATION` | — | `15` | Minutes, password-reset token validity |
