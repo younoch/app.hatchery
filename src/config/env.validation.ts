@@ -43,7 +43,7 @@ const envSchema = z
         'CORS_ORIGINS must be a comma-separated list of explicit URLs without wildcards',
       ),
     COOKIE_SECURE: z.enum(['true', 'false']).optional(),
-    COOKIE_SAME_SITE: z.enum(['lax', 'none']).default('lax'),
+    COOKIE_SAME_SITE: z.enum(['strict', 'lax', 'none']).default('lax'),
     REFRESH_TOKEN_TTL_MS: z
       .string()
       .default('1209600000')

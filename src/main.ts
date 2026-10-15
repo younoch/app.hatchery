@@ -56,6 +56,7 @@ async function bootstrap() {
       { type: 'apiKey', in: 'cookie' },
       'refresh-cookie',
     )
+    .setExternalDoc('OpenAPI JSON', '/api-json')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

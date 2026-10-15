@@ -120,7 +120,8 @@ export class AuthController {
       httpOnly: true,
       secure: this.configService.get<boolean>('cookieSecure') ?? false,
       sameSite:
-        this.configService.get<'lax' | 'none'>('cookieSameSite') ?? 'lax',
+        this.configService.get<'strict' | 'lax' | 'none'>('cookieSameSite') ??
+        'lax',
       path: REFRESH_COOKIE_PATH,
       ...(includeMaxAge
         ? { maxAge: this.configService.get<number>('refreshTokenTtlMs') }
