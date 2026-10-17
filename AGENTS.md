@@ -147,8 +147,12 @@ This is intentionally deferred and documented in the README Roadmap.
 
 * `POST /auth/refresh` / `POST /auth/logout`
 * Separate `RefreshToken` model — token stored as a SHA-256 hash (not bcrypt: bcrypt's random salting breaks direct DB lookup by hash, and its slowness is unneeded for high-entropy random tokens).
-* Rotation enabled: each `/auth/refresh` call revokes the used token and issues a new access+refresh pair. Reuse of an already-revoked token is rejected (401), enabling theft detection.
-* `POST /auth/login` now returns both `access_token` and `refresh_token`.
+* Rotation enabled: each `/auth/refresh` call revokes the used token and issues a new access+refresh pair. Reuse of an already-revoked token is rejected with a plain 401 (no theft detection or family revoke yet).
+* Refresh lifetime is fixed from login (`REFRESH_TOKEN_TTL_MS`, default 14 days), not sliding.
+* Cookie flags come from `COOKIE_SECURE` and `COOKIE_SAME_SITE`; `none` requires `COOKIE_SECURE=true`.
+* Logout: `POST /auth/refresh/logout` (the cookie Path is `/auth/refresh`, so `POST /auth/logout` does not receive the cookie from a browser).
+* Known gaps (deferred): no grace window, no token family, no reuse-triggered revoke-all, no `session_revoked` error code, no single-active-session takeover, password change does not revoke other sessions.
+* `POST /auth/login` returns `access_token` in the response body. The refresh token is set only as an httpOnly cookie named `refresh_token` (Path `/auth/refresh`).
 
 ### Password recovery
 
@@ -290,3 +294,5 @@ expected environment variables.
 ## Commands
 
 See `Project Commands.md` for the full development, Prisma, PostgreSQL, Git, and troubleshooting command reference.
+- Progress and task status: see `progress.md`.
+- Database structure: see `database.md` (generated from `prisma/schema.prisma`; update it in the same commit as any schema change).

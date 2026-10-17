@@ -1,0 +1,105 @@
+# Progress
+
+## Current state
+Auth, RBAC, email verification, password recovery, and refresh tokens are implemented. Registration can be synchronous or queued via BullMQ. Users can be listed, deleted, and assigned roles with permission checks. Health checks cover DB and memory. Missing: domain models for water-quality (Organization, Tank, Reading), audit trails, and advanced refresh-token hardening.
+
+## Backend task list
+| Task | Name | Status | Evidence (file/endpoint) | Open issue |
+|---|---|---|---|---|
+| 1 | Refresh token in httpOnly cookie | done | POST /auth/login sets refresh_token cookie, Path /auth/refresh | |
+| 2 | 14-day TTL, sliding, rotation grace window | partial | TTL 14 days fixed (not sliding), rotation works, no grace window | |
+| 2b | Single active session + session_revoked code | not started | No session_revoked error code, no family tracking | |
+| 3 | Idempotent create + batch sync (readings) | not started | Reading model NOT IMPLEMENTED | blocks Step 21 sync |
+| 4 | Server trust rules (createdById, syncedAt, future-date, isLate/needsReview) | not started | Reading model NOT IMPLEMENTED | blocks Step 21 sync |
+| 5 | Audited PATCH for synced readings | not started | ReadingAudit model NOT IMPLEMENTED | |
+| 6 | Error contract (per-field codes, 4xx/5xx consistency, list shape) | partial | Global error envelope exists, per-field codes not implemented | |
+| 7 | Expose isSuperAdmin (or effective permissions) on GET /user/me | not started | GET /user/me returns id, email, role (name, permissions) only; isSuperAdmin omitted | |
+| 8 | Refresh-token hardening: transaction around rotation, family id, reuse revoke | not started | Rotation is non-transactional, no family id, reuse detection returns plain 401 | |
+| 9 | Configurable refresh cookie Path | not started | Path hardcoded to /auth/refresh in auth.constants.ts | |
+| 10 | Revoke other sessions on password change | not started | PATCH /user/me/password does not revoke other refresh tokens | |
+| 11 | Decide: may unverified users log in? | not started | Currently yes; business rule not enforced | |
+| 12 | Water-quality domain: Organization, Tank, Reading models and endpoints | not started | Models NOT IMPLEMENTED | blocks Step 21 sync |
+
+## Verified API facts (frontend contract)
+| endpoint | method | auth | request | success response | notes |
+|---|---|---|---|---|---|
+| /auth/login | POST | none | { email, password } | { access_token } + Set-Cookie: refresh_token (httpOnly, Path=/auth/refresh, Max-Age=1209600) | access_token in body only; refresh token only in cookie |
+| /auth/refresh | POST | cookie (refresh_token) | refresh_token cookie | { access_token } + Set-Cookie: new refresh_token | Rotation: old token revoked, new pair issued |
+| /auth/refresh/logout | POST | cookie (refresh_token) | refresh_token cookie | { message } + Set-Cookie: refresh_token cleared | Path must be /auth/refresh for cookie to be sent |
+| /auth/logout | POST | cookie (refresh_token) | refresh_token cookie | { message } + Set-Cookie: refresh_token cleared | Does not receive cookie from browser (wrong path) |
+| /auth/register | POST | none | { email, password } | { id, email, createdAt, updatedAt, emailVerified, isSuperAdmin, roleId } | Synchronous |
+| /auth/register-async | POST | none | { email, password } | { message } | Queued via BullMQ, returns 202 |
+| /auth/verify-email | GET | none | token query param | { message } | Validates token, marks User.emailVerified=true |
+| /auth/forgot-password | POST | none | { email } | { message } | Generic response regardless of email existence |
+| /auth/reset-password | POST | none | { token, newPassword } | { message } | Token single-use via used flag |
+| /user/me | GET | Bearer (access_token) | none | { id, email, role: { name, permissions } } | isSuperAdmin NOT exposed |
+| /user | GET | Bearer + user:read | { page, pageSize, includeDeleted } | { data: User[], meta: { page, pageSize, total } } | Paginated, requires permission |
+| /user/{id} | DELETE | Bearer + user:delete | none | { message } | Cannot delete own account (business rule) |
+| /user/{id}/role | PATCH | Bearer + user:write | { roleId } | { message } | Only super admin can assign admin role |
+| /user/me/password | PATCH | Bearer | { currentPassword, newPassword } | { message } | No permission guard, requires current password |
+| /roles | GET | Bearer + role:read | none | Role[] | List all roles |
+| /roles/{id} | PATCH | Bearer + role:write | { name, permissions } | Role | Update role |
+| /health | GET | none | none | { status, info, error, details } | DB + memory checks, no throttling |
+
+Response envelope (all successful responses):
+```json
+{ "success": true, "statusCode": number, "data": any, "timestamp": "ISO-8601" }
+```
+
+Error envelope:
+```json
+{ "success": false, "statusCode": number, "path": string, "message": string | object, "timestamp": "ISO-8601" }
+```
+Validation error shape (message is object):
+```json
+{ "statusCode": 400, "message": ["error1", "error2"], "error": "Bad Request" }
+```
+
+Throttle values per endpoint:
+- Global: 100 requests per 60 seconds (hard-coded in app.module.ts, not from env)
+- /health: exempt from throttling (unverified: AGENTS.md says exempt, code not checked)
+- /auth/login: no override (uses global)
+
+Pagination shape:
+```json
+{ "data": T[], "meta": { "page": number, "pageSize": number, "total": number } }
+```
+Default: page=1, pageSize=10. includeDeleted query param exists but no soft-delete model currently.
+
+Permission list (RESOURCES × ACTIONS):
+- user:create, user:read, user:write, user:delete
+- role:create, role:read, role:write, role:delete
+
+Default roles: none seeded in code; must be created manually via API or DB.
+
+## Decisions log
+- 2026-10-15: Repository pattern — services never call Prisma directly; database access goes through repositories.
+- 2026-10-15: No @Global() modules — consumers import dependencies explicitly.
+- 2026-10-15: Refresh token stored as SHA-256 hash (not bcrypt) to enable direct DB lookup and avoid bcrypt's slowness for high-entropy tokens.
+- 2026-10-15: Super admin is a DB-only boolean (User.isSuperAdmin), not a role; cannot be set through API.
+- 2026-10-15: Password reset rules — repeatable requests, generic response regardless of email existence, single-use tokens via used flag, synchronous email.
+- 2026-10-15: Refresh token only in httpOnly cookie with Path /auth/refresh; not in response body.
+- 2026-10-15: Permissions only from /user/me, not in JWT; JWT carries only sub and email.
+- 2026-10-15: Throttling hard-coded to 60s TTL / 100 limit globally; not using env vars.
+
+## Doc corrections
+- AGENTS.md line 155 said login returns refresh_token in body; code returns only access_token in body, refresh_token only in cookie.
+- README table showed env vars THROTTLE_TTL and THROTTLE_LIMIT with defaults; code hard-codes 60000ms and 100 limit, ignoring env.
+- README line 107 said code fallback is 24h for TOKEN_EXPIRATION; code has no fallback, requires env or fails fast.
+
+## Parking lot
+- Dead-letter/failed-job alerting beyond dashboard (Step 8 polish)
+- RBAC: prevent privilege escalation via role permissions (regular admin with role:create/role:write can grant any permission)
+- Frontend integration (FRONTEND_URL swap-in)
+- Fix race condition: rapid concurrent register-async with same email can both pass sync duplicate-check
+- Scheduled cleanup job for expired EmailVerification records
+- Daemonize Mailpit as systemd service
+- Add auth in front of @bull-board dashboard (/queues)
+- Add timeout to EmailService.sendMail() calls
+- Refresh-token hardening: transaction around rotation, family id, reuse-triggered revoke-all, session_revoked error code, single-active-session takeover
+- Revoke other sessions on password change
+- Decide: may unverified users log in?
+- Expose isSuperAdmin or effective permissions on GET /user/me
+- Configurable refresh cookie Path
+- Error contract: per-field error codes, 4xx/5xx consistency, list shape
+- Domain models: Organization, Tank, Reading, ReadingAudit (blocks Step 21 sync)
