@@ -2,6 +2,7 @@
 
 ## Current state
 Auth, RBAC, email verification, password recovery, and refresh tokens are implemented. Registration can be synchronous or queued via BullMQ. Users can be listed, deleted, and assigned roles with permission checks. Health checks cover DB and memory. Missing: domain models for water-quality (Organization, Tank, Reading), audit trails, and advanced refresh-token hardening.
+Known issue: `DELETE /user/:id` fails with FK error (P2003 → 500) for any user who has a RefreshToken or PasswordResetToken, because `deleteUser` only clears EmailVerification.
 
 ## Backend task list
 | Task | Name | Status | Evidence (file/endpoint) | Open issue |
@@ -19,6 +20,10 @@ Auth, RBAC, email verification, password recovery, and refresh tokens are implem
 | 10 | Revoke other sessions on password change | not started | PATCH /user/me/password does not revoke other refresh tokens | |
 | 11 | Decide: may unverified users log in? | not started | Currently yes; business rule not enforced | |
 | 12 | Water-quality domain: Organization, Tank, Reading models and endpoints | not started | Models NOT IMPLEMENTED | blocks Step 21 sync |
+| 13 | Optional `User.name` (signup unchanged) | in progress | schema + getMe pending | |
+| 14 | User deletion policy (fix P2003 on delete; decide soft vs hard delete for domain records) | decision open | `UserRepository.deleteUser` | blocks Task 12 migration |
+| 15 | Env validation: `TOKEN_EXPIRATION` Zod default is `'3600'` (= 3.6s in jsonwebtoken); change to `'24h'` + format check | not started | env.validation.ts | |
+| 16 | Env validation: add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT` to Zod | not started | env.validation.ts | |
 
 ## Verified API facts (frontend contract)
 | endpoint | method | auth | request | success response | notes |
@@ -32,8 +37,8 @@ Auth, RBAC, email verification, password recovery, and refresh tokens are implem
 | /auth/verify-email | GET | none | token query param | { message } | Validates token, marks User.emailVerified=true |
 | /auth/forgot-password | POST | none | { email } | { message } | Generic response regardless of email existence |
 | /auth/reset-password | POST | none | { token, newPassword } | { message } | Token single-use via used flag |
-| /user/me | GET | Bearer (access_token) | none | { id, email, role: { name, permissions } } | isSuperAdmin NOT exposed |
-| /user | GET | Bearer + user:read | { page, pageSize, includeDeleted } | { data: User[], meta: { page, pageSize, total } } | Paginated, requires permission |
+| /user/me | GET | Bearer (access_token) | none | { id, email, name, role: { name, permissions } } | name is nullable; isSuperAdmin NOT exposed |
+| /user | GET | Bearer + user:read | query: page, pageSize, includeDeleted | envelope data = { items: User[], meta: { total, page, pageSize, totalPages, hasNextPage } } | Paginated, requires permission |
 | /user/{id} | DELETE | Bearer + user:delete | none | { message } | Cannot delete own account (business rule) |
 | /user/{id}/role | PATCH | Bearer + user:write | { roleId } | { message } | Only super admin can assign admin role |
 | /user/me/password | PATCH | Bearer | { currentPassword, newPassword } | { message } | No permission guard, requires current password |
@@ -59,10 +64,11 @@ Throttle values per endpoint:
 - Global: 100 requests per 60 seconds (hard-coded in app.module.ts, not from env)
 - /health: exempt from throttling (unverified: AGENTS.md says exempt, code not checked)
 - /auth/login: no override (uses global)
+- env.example has THROTTLE_TTL=60 but Zod default is 60000 (ms). Currently unused by code; fix the unit before wiring env into app.module.ts.
 
 Pagination shape:
 ```json
-{ "data": T[], "meta": { "page": number, "pageSize": number, "total": number } }
+{ "items": T[], "meta": { "total": number, "page": number, "pageSize": number, "totalPages": number, "hasNextPage": boolean } }
 ```
 Default: page=1, pageSize=10. includeDeleted query param exists but no soft-delete model currently.
 
@@ -81,11 +87,14 @@ Default roles: none seeded in code; must be created manually via API or DB.
 - 2026-10-15: Refresh token only in httpOnly cookie with Path /auth/refresh; not in response body.
 - 2026-10-15: Permissions only from /user/me, not in JWT; JWT carries only sub and email.
 - 2026-10-15: Throttling hard-coded to 60s TTL / 100 limit globally; not using env vars.
-
+- 2026-10-17: User.name is optional (String?); signup (email + password) stays unchanged.
 ## Doc corrections
 - AGENTS.md line 155 said login returns refresh_token in body; code returns only access_token in body, refresh_token only in cookie.
 - README table showed env vars THROTTLE_TTL and THROTTLE_LIMIT with defaults; code hard-codes 60000ms and 100 limit, ignoring env.
 - README line 107 said code fallback is 24h for TOKEN_EXPIRATION; code has no fallback, requires env or fails fast.
+- progress.md pagination shape was wrong (said `data` + `total`); real shape is `items` + `meta` with totalPages/hasNextPage.
+- SETUP.md smoke test step 3 said login returns refresh_token in body; it is cookie-only.
+- TOKEN_EXPIRATION: AGENTS.md/README say 24h, env.example says 7d, Zod default is '3600'. Code fix tracked as Task 15.
 
 ## Parking lot
 - Dead-letter/failed-job alerting beyond dashboard (Step 8 polish)

@@ -169,8 +169,7 @@ before you start building your project-specific features:
 1. `POST /auth/register-async` — register a user, confirm the
    verification email arrives in Mailpit
 2. `GET /auth/verify-email?token=...` — verify it
-3. `POST /auth/login` — confirm you get back both `access_token` and
-   `refresh_token`
++3. `POST /auth/login` — confirm the body has `access_token` and the response sets an httpOnly `refresh_token` cookie (Path `/auth/refresh`)
 4. `GET /user/me` (with the access token) — confirm your profile
    returns correctly
 5. `POST /auth/refresh` — confirm token rotation works

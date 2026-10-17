@@ -129,6 +129,8 @@ This is intentionally deferred and documented in the README Roadmap.
 
 ## Auth
 
+User.name` is optional and not collected at signup; it is shown by `GET /user/me` when set.
+
 ### Registration
 
 * `POST /auth/register` — synchronous registration.

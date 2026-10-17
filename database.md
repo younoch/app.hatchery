@@ -11,6 +11,7 @@
 | field | type | required | default | notes |
 |---|---|---|---|---|
 | id | String | yes | uuid() | Primary key |
+| name | String | no | - | Optional display name; NOT collected at signup |
 | email | String | yes | - | Unique |
 | password | String | yes | - | Hashed with bcrypt |
 | createdAt | DateTime | yes | now() | |
@@ -119,6 +120,10 @@ No models currently use soft delete. PaginationQueryDto has `includeDeleted` fie
 | 20260927183537_add_refresh_token | Created RefreshToken model |
 
 ## Not implemented yet (planned, NOT in the schema)
+
+> **Open decision (2026-10-17):** user-deletion policy for domain records (Reading, ReadingAudit).
+> Options: soft delete (`User.deletedAt`) vs hard delete + `SetNull` + name snapshot.
+> Decide before writing the Reading migration. Do not add `createdById` nullability or `userName` until decided.
 
 The following are planned design from frontend needs, not current schema:
 
