@@ -121,9 +121,10 @@ No models currently use soft delete. PaginationQueryDto has `includeDeleted` fie
 
 ## Not implemented yet (planned, NOT in the schema)
 
-> **Open decision (2026-10-17):** user-deletion policy for domain records (Reading, ReadingAudit).
-> Options: soft delete (`User.deletedAt`) vs hard delete + `SetNull` + name snapshot.
-> Decide before writing the Reading migration. Do not add `createdById` nullability or `userName` until decided.
+> **Decision (2026-10-17):** For now only the super admin can delete users, and the Organization module does not exist yet.
+> `Reading.createdById` and `ReadingAudit.who` stay required FKs (no SetNull, no name snapshot).
+> A user who owns Readings cannot be deleted (FK block, to be mapped to 409).
+> **Revisit when the Organization module is designed:** soft delete (`deletedAt`) vs hard delete + snapshot.
 
 The following are planned design from frontend needs, not current schema:
 

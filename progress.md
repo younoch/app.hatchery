@@ -21,7 +21,7 @@ Known issue: `DELETE /user/:id` fails with FK error (P2003 → 500) for any user
 | 11 | Decide: may unverified users log in? | not started | Currently yes; business rule not enforced | |
 | 12 | Water-quality domain: Organization, Tank, Reading models and endpoints | not started | Models NOT IMPLEMENTED | blocks Step 21 sync |
 | 13 | Optional `User.name` (signup unchanged) | in progress | schema + getMe pending | |
-| 14 | User deletion policy (fix P2003 on delete; decide soft vs hard delete for domain records) | decision open | `UserRepository.deleteUser` | blocks Task 12 migration |
+| 14 | `DELETE /user/:id`: clear RefreshToken/PasswordResetToken before delete; map P2003 to 409 instead of 500 | not started | `UserRepository.deleteUser`, `HttpExceptionFilter` | does not block Task 12 |
 | 15 | Env validation: `TOKEN_EXPIRATION` Zod default is `'3600'` (= 3.6s in jsonwebtoken); change to `'24h'` + format check | not started | env.validation.ts | |
 | 16 | Env validation: add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT` to Zod | not started | env.validation.ts | |
 
@@ -88,6 +88,7 @@ Default roles: none seeded in code; must be created manually via API or DB.
 - 2026-10-15: Permissions only from /user/me, not in JWT; JWT carries only sub and email.
 - 2026-10-15: Throttling hard-coded to 60s TTL / 100 limit globally; not using env vars.
 - 2026-10-17: User.name is optional (String?); signup (email + password) stays unchanged.
+- 2026-10-17: User deletion is super-admin-only for now. Domain-record deletion policy is deferred until the Organization module; Reading FKs stay required.
 ## Doc corrections
 - AGENTS.md line 155 said login returns refresh_token in body; code returns only access_token in body, refresh_token only in cookie.
 - README table showed env vars THROTTLE_TTL and THROTTLE_LIMIT with defaults; code hard-codes 60000ms and 100 limit, ignoring env.
@@ -112,3 +113,5 @@ Default roles: none seeded in code; must be created manually via API or DB.
 - Configurable refresh cookie Path
 - Error contract: per-field error codes, 4xx/5xx consistency, list shape
 - Domain models: Organization, Tank, Reading, ReadingAudit (blocks Step 21 sync)
+- Revisit user-deletion policy (soft delete vs snapshot) when Organization module is designed
+- PATCH /user/me to edit name
