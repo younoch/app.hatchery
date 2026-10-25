@@ -1,0 +1,179 @@
+# Progress
+
+## Current state
+
+Implemented: auth (login by email, httpOnly refresh cookie with rotation, password change, forgot/reset password, email verification through BullMQ), RBAC with global roles and a DB-only super admin, user list / delete / role assignment, pagination, response envelope, health checks, pino logging.
+
+Not implemented: everything marked **planned** below — organizations, per-organization permissions, username login, admin user management, tanks, readings sync, the error-code contract, session hardening.
+
+Known bugs today:
+
+* `TOKEN_EXPIRATION` Zod default is `'3600'`, which `jsonwebtoken` reads as 3600 **milliseconds** (≈3.6 s). Hidden only because the dev `.env` sets `7d` (T2).
+* `DELETE /user/:id` fails with a foreign-key error (500) for any user who has a refresh token or password-reset token (T5).
+* `/auth/login` has no stricter rate limit; README used to claim one (T3).
+* The refresh token lifetime is sliding, not fixed (each rotation gets a fresh 14 days).
+
+Frontend (`hatchery-frontend`): Step 21 (offline sync) waits on the Readings contract below and builds a mock adapter from it.
+
+## Task plan
+
+Recommended build order is the numeric order. "Docs first": each task updates its docs in the same commit.
+
+| # | Task | Status | Depends on |
+|---|---|---|---|
+| T1 | Rewrite the six docs for the hatchery design | in progress (this commit) | |
+| T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; fix `THROTTLE_TTL` unit; `.env.example` and README table match | not started | |
+| T3 | `@Throttle` on `/auth/login`: 10 per minute per IP | not started | |
+| T4 | Rename controller `/user` → `/users` (and `/user/me` → `/users/me`); update docs and Swagger; the frontend changes its paths in the same step | not started | |
+| T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings | not started | |
+| T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants | not started | |
+| T7 | Permission map refactor (per-resource actions, platform vs org scope); resolver stays on `Role.permissions` until T10 | not started | |
+| T8 | User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | not started | T6, T7 |
+| T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | not started | T7, T8 |
+| T10 | `Organization`, `OrganizationRole`, `User.organizationId`; `resolveOrganizationId`; `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; resolver switches to `OrganizationRole`; `assignRole` can no longer assign `admin` | not started | T8, T9 |
+| T11 | Admin user management: `POST /users`, `PATCH /users/:id`, `POST /users/:id/reset-password`, `GET /users?organizationId=`; `mustChangePassword` enforcement | not started | T10 |
+| T12 | `GET/PATCH /organization-roles` | not started | T10 |
+| T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | not started | T9, T11 |
+| T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10 |
+| T15 | `Reading` model; `POST /readings/sync` | not started | T6, T14 |
+| T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke sessions on password change, reset and deactivation | not started | T8 (best before T15) |
+| T17 | Structured admin-action log lines | not started | T10, T11 |
+
+## API contract
+
+Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status": **implemented** = exists today; **planned** = decided, task in brackets. Organization-scoped endpoints take `organizationId` (query for GET, body for POST) from the **super admin only** (required); everyone else uses their own organization.
+
+| endpoint | auth / permission | request | `data` | status |
+|---|---|---|---|---|
+| `POST /auth/login` | none | `{ username, password }` (today `{ email, password }`) | `{ access_token }` + cookie `refresh_token` (httpOnly, Path `/auth/refresh`, 14 days) | implemented; username planned (T8) |
+| `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; hardening planned (T16) |
+| `POST /auth/refresh/logout` | cookie | — | `{ message }`, cookie cleared | implemented |
+| `POST /auth/logout` | cookie | — | `{ message }` | implemented but unusable from a browser (wrong cookie Path); see parking lot |
+| `POST /auth/register`, `/auth/register-async` | none | `{ email, password }` | user / `{ message }` (202) | implemented; being removed (T13) |
+| `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 `email_disabled` when email is off (T13) |
+| `GET /users/me` | Bearer | — | `{ id, email, username, name, isSuperAdmin, organizationId, permissions, mustChangePassword, role: { name } \| null }` | planned (T4, T8); today `/user/me` returns `{ id, email, role: { name, permissions } }` |
+| `PATCH /users/me/password` | Bearer | `{ currentPassword, newPassword }` | `{ message }` | implemented as `/user/me/password` (T4); also clears `mustChangePassword`, revokes other sessions (T11, T16) |
+| `GET /users` | `user:read` | `page, pageSize, organizationId` | `{ items, meta }` (below) | implemented as global list; org-scoped (T11) |
+| `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | user | planned (T11). `roleId` can never be `admin` |
+| `PATCH /users/:id` | `user:write` | `{ roleId?, isActive?, name? }` | user | planned (T11) |
+| `POST /users/:id/reset-password` | `user:reset-password` | `{ temporaryPassword }` | `{ message }` | planned (T11) |
+| `DELETE /users/:id` | `user:delete` (super admin) | — | `{ message }` | implemented as `/user/:id` (T4, T5) |
+| `GET/POST /roles`, `/roles/:id` | super admin | see Swagger | Role | implemented (global role CRUD) |
+| `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | organization + admin | planned (T10). One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |
+| `GET /organizations` | `organization:read` | `page, pageSize` | `{ items, meta }` | planned (T10) |
+| `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | planned (T10) |
+| `GET /organization-roles` | `organization-role:read` | `organizationId` (super admin) | `[{ id, roleId, name, permissions, editable }]` | planned (T12) |
+| `PATCH /organization-roles/:id` | `organization-role:write` | `{ permissions }` (org-level keys only; `admin` row rejected) | the row | planned (T12) |
+| `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` | planned (T14) |
+| `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name }`; `{ name?, isActive? }` | tank | planned (T14) |
+| `POST /readings/sync` | `reading:create` | see below | see below | planned (T15) |
+| `GET /health` | none | — | `{ status, info, error, details }` | implemented |
+
+Pagination (inside `data`): `{ "items": [], "meta": { "total", "page", "pageSize", "totalPages", "hasNextPage" } }`. Defaults: `page=1`, `pageSize=10`.
+
+Error envelope: see `AGENTS.md` → Error contract. Today: `{ success:false, statusCode, path, message, timestamp }`.
+
+### Readings sync (T15)
+
+"Batch" is reserved for the hatchery production batch (frontend Step 25); this endpoint is "sync".
+
+Request: `{ items: [{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxygenMgL, note? }] }`, 1–100 items (the frontend sends 20–50 per call on weak networks). `id` is a client UUID v4, `recordedAt` is ISO 8601.
+
+Response `data`: `{ results: [{ id, status, identical?, errors? }], totals: { created, duplicate, rejected } }`. HTTP 200 for any well-formed request, even when every item is rejected (the server logs a warning then).
+
+Whole-request failures: 400 if `items` is missing, not an array, empty, longer than 100, or an `id` is not a UUID; 401 session ended; 403 `permission_denied` or `no_organization`. Pending items stay pending on 401/403/5xx and on network errors.
+
+Per item:
+
+| status | meaning | client action |
+|---|---|---|
+| `created` | stored | mark synced |
+| `duplicate` | same `id` already stored by the same user (first write wins; the new payload is ignored). `identical: true\|false` says whether the stored values equal the sent ones | mark synced; warn if `identical: false` |
+| `rejected` | not stored; `errors: [{ field, code, params }]` | mark failed, show the code's text, allow fix-and-resend (same `id` is fine) — except `id_conflict`, which needs a new UUID |
+
+Server rules:
+
+* `createdById` from the token, `syncedAt = now()`. The client must not send `createdById`, `syncedAt`, `organizationId`; such fields reject the item (`not_allowed`).
+* `recordedAt` more than `READING_FUTURE_TOLERANCE_MS` (default 10 minutes) in the future → `recorded_at_in_future`.
+* Hard limits cover impossible values only: numbers must be finite and not negative; pH 0–14; `note` ≤ 200 chars. The frontend's sample ranges stay samples until the owner confirms real ranges (Open decisions).
+* `tankId` must belong to the caller's organization (super admin: any organization), else `tank_not_found`. Inactive tanks are accepted.
+* Same `id` from another user → `id_conflict`.
+* No edit or delete after sync: a correction is a new reading. "Last value" prefill stays per user and local to the phone. Organization-wide viewing is online only, later, behind `reading:read-all`.
+* Permission changes reach the client at its next `GET /users/me`; the server enforces them immediately (403 `permission_denied`, pending items kept).
+
+### Changes the frontend must follow
+
+* Paths: `/user…` → `/users…`; login field `username` (lowercase); `GET /users/me` shape with top-level `permissions`.
+* Tanks come from `GET /tanks` (cache in Dexie), not from a fixed config file.
+* New screen: forced password change when `mustChangePassword` is true.
+* Map error `code` values to i18n keys; never display `message`.
+* Handle 401 `user_inactive` ("account closed, contact your administrator") separately from `session_revoked`.
+* The frontend does not implement signup.
+
+## Error codes (starter list, finalized in T6)
+
+| code | HTTP | meaning |
+|---|---|---|
+| `required`, `invalid_type`, `invalid_format`, `too_short`, `too_long`, `out_of_range`, `invalid_uuid`, `invalid_datetime`, `not_allowed` | 400 (field level) | validation, reported in `errors[]` with `field` and `params` |
+| `weak_password`, `invalid_username` | 400 (field level) | password / username rules |
+| `organization_required` | 400 | super admin did not name an organization |
+| `invalid_credentials` | 401 | wrong username or password |
+| `user_inactive` | 401 | account deactivated |
+| `session_revoked` | 401 | another device logged in (T16) |
+| `unauthorized` | 401 | missing or invalid token |
+| `must_change_password` | 403 | change the temporary password first |
+| `permission_denied` | 403 | missing permission |
+| `no_organization` | 403 | user has no organization |
+| `organization_mismatch` | 403 | asked for another organization |
+| `org_admin_protected` | 409 | action not allowed on the organization's admin (deactivate, delete, role change) |
+| `cannot_target_self` | 409 | cannot delete or deactivate yourself |
+| `username_taken`, `email_taken`, `conflict` | 409 | uniqueness or foreign-key conflict |
+| `not_found`, `tank_not_found` | 404 | missing or outside your organization |
+| `id_conflict`, `recorded_at_in_future` | item level (sync) | see Readings sync |
+| `email_disabled` | 503 | email features are switched off |
+| `rate_limited` | 429 | throttled |
+
+## Decisions log
+
+* 2026-10-15: Repository pattern; no `@Global()` modules; refresh token stored as SHA-256 hash; super admin is a DB-only boolean; password reset repeatable, generic response, single-use, synchronous; refresh token only in an httpOnly cookie (Path `/auth/refresh`); permissions never in the JWT.
+* 2026-10-17: User deletion is super-admin only. Reading foreign keys stay required (no SetNull, no name snapshot).
+* 2026-10-18: Project is the hatchery backend, no longer a boilerplate, and a professional product (no charge until the modules hatcheries need exist). Prototype scope: organization, user, tank, reading.
+* 2026-10-18: Super admin creates an organization and its one admin; the admin adds users. A user belongs to one organization. One admin per organization, never zero; transfer is super-admin-only and the super admin picks the previous admin's new role.
+* 2026-10-18: Roles are a global list (`admin`, `manager`, `staff`); per-organization permissions via `OrganizationRole`, copy-on-create. The org admin cannot edit the `admin` row or grant platform keys.
+* 2026-10-18: Login by `username` (lowercase, globally unique). `email` is mandatory and unique, not a login key. Frontend has no signup; backend signup is removed (T13) after the seed script and admin user creation exist.
+* 2026-10-18: Admin creates users with a temporary password; the backend enforces `mustChangePassword`. Admin-driven password reset replaces email reset.
+* 2026-10-18: No paid mail service for now (`EMAIL_ENABLED=false`); the sending code stays dormant and is switched on later with SMTP variables.
+* 2026-10-18: `isActive` on users and tanks (deactivate, never delete tanks). Inactive tanks still accept readings.
+* 2026-10-18: Readings: sync endpoint with per-item results; first write wins; `identical` flag; PATCH/audit, `isLate`, `needsReview`, pull sync are out of the pilot.
+* 2026-10-18: Super admin can act in any organization but must name it; there are no global lists. `reading:read-all` is separate from `reading:create`.
+* 2026-10-19: Access token default lifetime `1h`; login throttle 10/min/IP; refresh absolute max age deferred. `/user` renamed to `/users`.
+* 2026-10-20: Auth tables cascade on user delete; domain records restrict.
+
+## Open decisions
+
+| # | Decision | Needed by |
+|---|---|---|
+| 1 | Real hatchery value ranges (pH, temperature, salinity, oxygen) for review flags — the frontend's sample ranges are not confirmed | before `needsReview` is ever built |
+| 2 | Mail provider and the day email is switched on (Brevo free tier is the candidate; needs a domain with SPF/DKIM) | when admins stop being able to handle resets |
+| 3 | Whether to bring back `ReadingAudit` + PATCH | before the dashboard |
+
+## Parking lot
+
+* Refresh token absolute maximum age (e.g. 90 days) together with token families (T16)
+* `ReadingAudit` and an audited PATCH for synced readings; `isLate` derived from `syncedAt - recordedAt`; `needsReview` once ranges are confirmed
+* Pull sync (cursor `syncedAt`, not `recordedAt`), `GET /readings` (organization-wide, `reading:read-all`), dashboard index `[tankId, recordedAt]`
+* Email: switch-on checklist, verification flow, email-based reset, invitation flow
+* Deployment: one registrable domain with `app.` and `api.` subdomains (cookie `SameSite=lax`); production checklist (HTTPS, backups, secrets)
+* Generate frontend types from the Swagger JSON (`/api-json`)
+* Login throttle per username in addition to per IP
+* Fix or remove `POST /auth/logout` (the cookie Path means browsers never send the cookie)
+* `PATCH /users/me` (edit own name)
+* Database-level one-admin-per-organization guard (e.g. `Organization.adminId @unique`) if the service rule proves fragile
+* A CHECK that non-super-admin users always have an organization and role
+* Organization: more fields, rename endpoint, own module permissions
+* Custom roles per organization
+* Remove or implement the inert `includeDeleted` pagination field
+* Per-species value ranges
+* bull-board `/queues`: put authentication in front before any non-local exposure
+* Dead-letter/failed-job alerting; cleanup job for expired `EmailVerification`; timeout on `EmailService.sendMail()`; Mailpit as a systemd service
+* Repo hygiene: `package.json` name and version, `.env.example` database name (`nestjs_boilerplate_db`)

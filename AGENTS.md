@@ -1,37 +1,66 @@
 # AGENTS.md — Context for AI Agents
 
-This is a reusable NestJS backend boilerplate and a learning project for a backend beginner with ~6 years of frontend experience.
+NestJS backend for a hatchery water-quality system (shrimp hatcheries, Cox's Bazar). It was cloned from a reusable boilerplate but is now its own professional product, built to be taken to real hatcheries. The owner has ~6 years of frontend experience and is learning backend.
+
+The frontend is a separate repo (`hatchery-frontend`: Vue 3, offline-first PWA, Bangla-first i18n). This repo owns the API contract (`progress.md`).
+
+## Reading order
+
+1. `AGENTS.md` — rules and conventions (this file)
+2. `progress.md` — tasks, API contract, error codes, decisions, parking lot
+3. `database.md` — schema (target state, with status markers)
+4. `COORDINATION.md` — open requests between frontend and backend (temporary; deleted at project end)
+
+Each fact lives in one file: rules here, schema in `database.md`, tasks/contract/decisions in `progress.md`, the environment table in `README.md`.
+
+## Working with the owner
+
+* Talk to the owner in Bangla script. Code, docs and commits are in English.
+* Explain the reasoning and ask useful architectural questions before deciding. The owner reviews every change.
+* Do not rewrite an existing file unless asked. Show exact line-level changes so the owner can apply and understand them. Whole-file output is for new files, or when explicitly requested.
+* Suggest when to commit and a Conventional Commit message (`feat(user): ...`). One logical change per commit.
+* Docs first: update the relevant doc before the code that depends on it. A schema change and its `database.md` update go in the same commit.
+* Verify edits on disk (see Known footguns).
 
 ## Philosophy
 
-* Build features **simple first**, then improve toward industry-standard patterns when needed.
-* Do not over-engineer the first implementation.
-* Deferred improvements belong in the README Roadmap.
-* Existing decisions below are settled unless the user explicitly reopens them.
-* When discussing architecture, prefer explaining the reasoning and asking useful architectural questions rather than blindly making decisions.
+* Build simple first, then improve when needed. Do not over-engineer.
+* Decisions in `progress.md` → Decisions log are settled unless the owner reopens them. Open questions go in "Open decisions"; deferred ideas go in "Parking lot".
+* Docs describe the decided design. Anything not yet in code is marked **planned** with its task number (`progress.md`).
 
-## Tech Stack
+## Domain
+
+* **Organization** = one hatchery (a tenant). A user belongs to exactly one organization. The same person in two hatcheries needs two accounts (`username` and `email` are globally unique).
+* **Super admin** — the platform owner. DB-only flag, no organization, can act in any organization. Creates organizations and gives each one an admin.
+* **Org admin** — exactly one per organization, never zero. Adds users, resets passwords, deactivates users, manages tanks, and decides what each role may do in their organization.
+* **Roles** — a global list (`admin`, `manager`, `staff`, seeded). What a role may do is per organization (`OrganizationRole`, copied from the global role when the organization is created).
+* **Tank** — belongs to an organization. Deactivated, never deleted.
+* **Reading** — one water-quality measurement (pH, temperature, salinity, oxygen) for a tank. Created on phones, often offline, synced later. Immutable in the pilot.
+* "Phone = staff, desktop = admin" is only a design lens for the frontend. Access control is RBAC.
+* One active session per account: a new login revokes the old device's session (takeover).
+
+## Tech stack
 
 * NestJS + TypeScript + pnpm
 * PostgreSQL + Prisma ORM
 * JWT auth with Passport + bcrypt
 * BullMQ + Redis for background jobs
-* Mailpit + Nodemailer for local email
+* Nodemailer (Mailpit locally); email is disabled by default (see Email)
 * Pino structured logging
 * `@nestjs/throttler` for rate limiting
 * `@bull-board/nestjs` at `/queues`
 * `@nestjs/terminus` for health checks
 * Path alias: `@/*` → `src/*`
-* PostgreSQL, Redis and Mailpit run as native local services on Fedora; no Docker for local development.
+* PostgreSQL, Redis and Mailpit run as native services on Fedora; no Docker for local development.
 
-## Project Structure
+## Project structure
 
 ```text
 src/
 ├── app.module.ts
 ├── main.ts
 ├── common/
-│   ├── repositories/
+│   ├── repositories/   (shared repositories, e.g. UserRepository)
 │   ├── permissions/
 │   ├── guards/
 │   ├── decorators/
@@ -46,175 +75,158 @@ src/
 │   ├── auth/
 │   ├── user/
 │   ├── role/
-│   └── health/
+│   ├── health/
+│   └── (planned) organization/ organization-role/ tank/ reading/
 └── test/
 ```
 
 ### Module conventions
 
-Feature modules normally contain:
+Feature modules normally contain `controller/`, `service/`, `repository/`, `dto/`. Small modules may keep files at the module root.
 
-```text
-controller/
-service/
-repository/
-dto/
-```
-
-Small modules may keep files at the module root.
-
-Naming:
-
-* `{feature}.controller.ts`
-* `{feature}.service.ts`
-* `{entity}.repository.ts`
-* `{purpose}.dto.ts`
-* `{feature}.module.ts`
+Naming: `{feature}.controller.ts`, `{feature}.service.ts`, `{entity}.repository.ts`, `{purpose}.dto.ts`, `{feature}.module.ts`.
 
 ### Repository pattern
 
-* Services never call Prisma directly.
-* Database access goes through repositories.
-* Repository methods accept optional `tx?: Prisma.TransactionClient` for transactions.
-* User queries omit passwords by default.
-* Explicit `*ForAuth` methods may return the password hash when required for bcrypt comparison.
-* Do not use `@Global()` modules; consumers import dependencies explicitly.
+* Services never call Prisma directly; database access goes through repositories.
+* Repository methods accept an optional `tx?: Prisma.TransactionClient`.
+* User queries omit the password by default. Explicit `*ForAuth` methods may return the hash for bcrypt comparison.
+* No `@Global()` modules; consumers import dependencies explicitly.
+* `UserRepository` lives under `common/repositories/` on purpose, to avoid a circular dependency between the User and Permissions modules.
 
-## RBAC Architecture
+## RBAC
 
-* `Role.permissions` is a `String[]`.
-* Permission format: `"resource:action"`, e.g. `"user:delete"`.
-* Permissions are generated from `RESOURCES × ACTIONS`.
-* Adding a new module normally means adding its resource to `RESOURCES`.
-* `permission.constants.ts` provides the permission whitelist used by DTO validation.
+* Permission key: `resource:action`. Keys come from a per-resource action map in `permission.constants.ts` (not RESOURCES × ACTIONS: `read-all` makes no sense on every resource). The same file is the whitelist for DTO validation and says which keys are platform-level. (Planned, T7; today it is RESOURCES × ACTIONS for `user` and `role`.)
+* Two scopes. **Platform** keys are never stored in an `OrganizationRole`; they work only through the super-admin bypass. **Org** keys can be granted to roles by the org admin.
 
-### Super Admin
+| resource | actions | scope |
+|---|---|---|
+| `user` | create, read, write, reset-password | org |
+| `user` | delete | platform (super admin only) |
+| `organization` | create, read, transfer-admin | platform |
+| `role` | create, read, write, delete | platform |
+| `organization-role` | read, write | org |
+| `tank` | create, write | org |
+| `reading` | create, read-all | org |
 
-* `User.isSuperAdmin` is a separate DB-only boolean, not a role.
-* It cannot be set through the API.
-* A partial unique index ensures only one super admin exists.
-* Super admin bypasses permission checks.
+* `GET /tanks` needs no key: any member of the organization can list its tanks.
+* `reading:create` covers creating readings and seeing your own. `reading:read-all` is organization-wide viewing.
 
-### Permission resolution
+Default templates (global `Role.permissions`, seeded; copied into each organization's `OrganizationRole` rows when it is created):
 
-`UserPermissionResolver` is the single abstraction used by `PermissionsGuard` and future permission consumers.
+| role | permissions |
+|---|---|
+| `admin` | `user:create`, `user:read`, `user:write`, `user:reset-password`, `organization-role:read`, `organization-role:write`, `tank:create`, `tank:write`, `reading:create`, `reading:read-all` |
+| `manager` | `user:read`, `tank:create`, `tank:write`, `reading:create`, `reading:read-all` |
+| `staff` | `reading:create` |
 
-It:
+### Effective permissions
 
-* fetches the user and role
-* exposes `getPermissions()`
-* exposes `hasPermission()`
-* handles the super-admin bypass internally
+`UserPermissionResolver` is the single abstraction used by `PermissionsGuard` and `GET /users/me`.
 
-`UserRepository` lives under `common/repositories/` intentionally to avoid circular dependencies between User and Permissions modules.
+* Super admin: every key (bypass handled inside the resolver).
+* Everyone else: `OrganizationRole(user.organizationId, user.roleId).permissions`. A user without an organization or role has none.
+
+### Who may grant what
+
+* Role management (`/roles`) is platform-level: super admin only.
+* The org admin edits only the `permissions` of the organization's own `OrganizationRole` rows, and only with org-level keys. The `admin` role's row is not editable.
+* The org admin cannot create roles and cannot grant platform keys, so privilege escalation through role editing is closed by design.
+
+### Super admin
+
+* `User.isSuperAdmin` is a DB-only boolean, not a role. It cannot be set through the API.
+* A partial unique index allows only one super admin.
+* Super admin bypasses permission checks. It does **not** bypass tenant rules: org-scoped endpoints still need an explicit organization (see below).
 
 ### Guard vs business rules
 
-`PermissionsGuard` only checks generic `"resource:action"` permissions.
+`PermissionsGuard` only checks generic `resource:action` keys. Business rules belong in services, never in the guard.
 
-Business-specific rules belong in the service layer.
+## Tenant isolation (security-critical)
 
-Examples:
+* All organization-scoped data (users, tanks, readings, organization roles) is reached through one helper: `resolveOrganizationId(caller, requested?)` (planned, T10).
+  * Normal user: their own organization. A different `requested` organization → 403 `organization_mismatch`. No organization → 403 `no_organization`.
+  * Super admin: `organizationId` is required (query or body); missing → 400 `organization_required`.
+* There are no global lists. `GET /users` is always "the users of one organization".
+* Never filter by a possibly-null `organizationId`: in Prisma, `where: { organizationId: null }` returns the users who have no organization, and silently returns the wrong data.
+* Target-specific calls (`PATCH /users/:id`, `PATCH /organization-roles/:id`, reset password, ...) need no organization parameter. A normal caller may touch only targets in their own organization; anything else is **404**, so existence is not revealed. Super admin may touch any target.
+* A user without an organization who is not the super admin is rejected (403 `no_organization`) by every organization-scoped endpoint.
 
-* Only super admin can assign the literal `admin` role → `UserService`
-* A user cannot delete their own account → `UserService.deleteUser(userId, currentUserId)`
+## Business rules (service layer)
 
-Do not put feature-specific business rules inside the generic guard.
-
-### Known RBAC gap
-
-A regular admin with `role:create` / `role:write` can currently create a role containing any permission set, potentially creating an admin-equivalent role without the `admin` name.
-
-This is intentionally deferred and documented in the README Roadmap.
+* **Admin role.** The `admin` role is assigned only (a) when the super admin creates an organization (first admin) and (b) by the super-admin transfer. `PATCH /users/:id` can never set `admin` and cannot change the admin's own role.
+* **One admin per organization, never zero.** The organization's admin cannot be deactivated, deleted, or have the role changed except through the transfer. Enforced in the service inside a transaction (`Role` is global, so the database cannot enforce it).
+* **Admin transfer** (`organization:transfer-admin`, super admin): the new admin must be an active user of the same organization; the previous admin gets a role chosen by the super admin (not `admin`); one transaction.
+* **Deactivation.** `isActive = false` blocks login and refresh and revokes all of the user's refresh tokens. Nobody can deactivate themselves.
+* **Delete user** — super admin only; not yourself; not the organization's admin. A user who owns readings cannot be deleted (foreign-key block → 409).
+* **Passwords.** The admin creates users with a temporary password and `mustChangePassword = true`. Admin-driven reset (`user:reset-password`, default only the `admin` role) sets a temporary password, `mustChangePassword = true`, and revokes all sessions. Only the super admin can reset an organization's admin. A password change clears `mustChangePassword` and revokes the user's other sessions.
+* **Usernames.** Chosen by the admin, never changed by the user. Lowercase `a-z 0-9 . _ -`, 3–30 characters, globally unique, normalized to lowercase before lookup.
+* **Own account.** A user cannot delete or deactivate their own account.
+* **Admin-action log.** Each of these writes one structured pino line `{ action, actorId, organizationId, targetId }`: organization create, user create, role change, deactivate/activate, password reset, admin transfer, organization-role update (planned, T17; no new table yet).
 
 ## Auth
 
-User.name` is optional and not collected at signup; it is shown by `GET /user/me` when set.
+### Login and per-request checks
 
-### Registration
-
-* `POST /auth/register` — synchronous registration.
-* `POST /auth/register-async` — registration with email verification queued through BullMQ.
-
-### Password change
-
-`PATCH /user/me/password`
-
-* Requires `currentPassword` and `newPassword`.
-* Current password is verified with bcrypt.
-* No permission guard is needed.
-* Other JWT sessions are not invalidated; token blacklist/session invalidation is deferred.
+* `POST /auth/login` takes `username` + `password` (planned, T8; today `email` + `password`). The body returns `access_token`; the refresh token is set only as an httpOnly cookie `refresh_token` (Path `/auth/refresh`).
+* The JWT carries only `sub` (+ `email`). Permissions are never in the token.
+* `JwtStrategy.validate` loads the user on every request (planned, T8). Order of checks: valid JWT → user exists and is active (else 401 `user_inactive`) → `mustChangePassword` (else 403 `must_change_password`; allowed: `GET /users/me`, `PATCH /users/me/password`, logout) → permission (else 403 `permission_denied`). Deactivation and permission changes therefore take effect immediately on the server; the client learns of permission changes at its next `GET /users/me`.
+* Access token lifetime: `TOKEN_EXPIRATION`, default `1h`.
+* Password policy: at least one letter and one number.
+* Login rate limit: 10 requests per minute per IP on `/auth/login` (planned, T3).
 
 ### Refresh tokens
 
-* `POST /auth/refresh` / `POST /auth/logout`
-* Separate `RefreshToken` model — token stored as a SHA-256 hash (not bcrypt: bcrypt's random salting breaks direct DB lookup by hash, and its slowness is unneeded for high-entropy random tokens).
-* Rotation enabled: each `/auth/refresh` call revokes the used token and issues a new access+refresh pair. Reuse of an already-revoked token is rejected with a plain 401 (no theft detection or family revoke yet).
-* Refresh lifetime is fixed from login (`REFRESH_TOKEN_TTL_MS`, default 14 days), not sliding.
-* Cookie flags come from `COOKIE_SECURE` and `COOKIE_SAME_SITE`; `none` requires `COOKIE_SECURE=true`.
-* Logout: `POST /auth/refresh/logout` (the cookie Path is `/auth/refresh`, so `POST /auth/logout` does not receive the cookie from a browser).
-* Known gaps (deferred): no grace window, no token family, no reuse-triggered revoke-all, no `session_revoked` error code, no single-active-session takeover, password change does not revoke other sessions.
-* `POST /auth/login` returns `access_token` in the response body. The refresh token is set only as an httpOnly cookie named `refresh_token` (Path `/auth/refresh`).
+* `POST /auth/refresh`, `POST /auth/refresh/logout`. (The cookie Path is `/auth/refresh`, so `POST /auth/logout` never receives the cookie from a browser.)
+* Separate `RefreshToken` model; the token is stored as a SHA-256 hash (not bcrypt: random salting breaks direct lookup by hash, and slowness is unneeded for high-entropy tokens).
+* Rotation: each refresh revokes the used token and issues a new access + refresh pair. Reuse of a revoked token → plain 401.
+* Lifetime: `REFRESH_TOKEN_TTL_MS` (14 days) counted from each rotation, so it is **sliding**. No absolute maximum age yet (parking lot).
+* Cookie flags: `COOKIE_SECURE`, `COOKIE_SAME_SITE` (`none` requires `COOKIE_SECURE=true`). Production target: frontend and API under one registrable domain (`app.`/`api.` subdomains) so `lax` works.
+* Hardening (planned, T16): transaction around rotation, grace window (a lost refresh response must not log the user out), token family id, reuse revokes the family, `session_revoked` code, single-session takeover, other sessions revoked on password change/reset/deactivation.
 
-### Password recovery
+### Public signup
 
-* `POST /auth/forgot-password`
-* `POST /auth/reset-password`
+`POST /auth/register` and `/auth/register-async` exist today. They are being removed (T13): users are created only by the super admin (first admin) and org admins. Do not build on them. The frontend never implements signup.
 
-Password reset uses a separate `PasswordResetToken` model.
+## Email
 
-Important rules:
+* `EMAIL_ENABLED=false` is the default (planned, T13): no mail service is paid for in the pilot. The email address is mandatory and unique, shown to admins, but unused for login.
+* When disabled, `forgot-password`, `reset-password` and `verify-email` answer 503 `email_disabled`. Password recovery is the admin-driven reset.
+* The sending code (`EmailService`, BullMQ processor, `EmailVerification`, `PasswordResetToken`) stays dormant. Turning email on later means flipping the flag and setting the SMTP variables (a provider with a free tier, e.g. Brevo, was considered). Verified emails will be required before email-based reset is trusted.
 
-* Reset requests must be repeatable.
-* Always return the same generic forgot-password response regardless of whether the email exists.
-* Token expiration is controlled by `PASSWORD_RESET_EXPIRATION`.
-* Default expiration: 15 minutes.
-* Tokens are single-use through the `used` flag.
-* Password reset email is synchronous; queueing is intentionally not used here.
+## Error contract
 
-## Environment Variables
+* Envelope: `{ success: false, statusCode, code, path, message, errors?, timestamp }`.
+* `code` is a stable machine code (snake_case) and is what the frontend maps to i18n text. `message` is English developer text and is never shown to users.
+* Field problems come as `errors: [{ field, code, params }]`. The code list is in `progress.md` → Error codes.
+* Today (current): Nest's default validation shape (`message` as an array of strings) and no `code`. Planned in T6.
+* `HttpExceptionFilter` maps Prisma errors: `P2025` → 404, `P2002` → 409, `P2003` → 409 (planned).
 
-Keep the README environment-variable table synchronized with the code.
+## Readings sync invariants
 
-Important variables:
+The full contract is in `progress.md`. The rules that must never break:
 
-```text
-DATABASE_URL
-JWT_SECRET
-TOKEN_EXPIRATION
-PASSWORD_RESET_EXPIRATION
-REDIS_HOST
-REDIS_PORT
-SMTP_HOST
-SMTP_PORT
-APP_URL
-FRONTEND_URL
-LOG_LEVEL
-THROTTLE_TTL
-THROTTLE_LIMIT
-```
+* The client never sends `createdById`, `syncedAt` or `organizationId`. The server derives them (token and `now()`).
+* The client UUID is the primary key and the idempotency key. The first write wins; a repeat from the same user is a `duplicate`, never an overwrite.
+* A tank must belong to the caller's organization (super admin: any); otherwise `tank_not_found`.
 
-`JWT_SECRET` has no fallback and must fail fast when missing.
+## Environment variables
 
-Default JWT expiration: `24h`.
+The full table with defaults is in `README.md`; keep it synchronized with `env.validation.ts` and `.env.example`.
 
-`PASSWORD_RESET_EXPIRATION` defaults to `15` minutes.
-`REDIS_HOST` defaults to `localhost` and `REDIS_PORT` defaults to `6379`.
-`SMTP_HOST` defaults to `localhost` and `SMTP_PORT` defaults to `1025` for Mailpit in local dev.
-`APP_URL` defaults to `http://localhost:4000` and is used for reset/verification links.
-`FRONTEND_URL` is reserved for future frontend integration.
+* `JWT_SECRET` has no fallback and must fail fast when missing.
+* `TOKEN_EXPIRATION` must carry a unit (`1h`, `15m`). A bare number string is read as **milliseconds** by `jsonwebtoken`.
+* Set `TOKEN_EXPIRATION` explicitly in production.
+* Every variable the code reads must be in the Zod schema, so a wrong value fails at startup instead of becoming `NaN`.
 
-## Known Footguns
+## Known footguns
 
 ### Prisma migration renames
 
-`prisma migrate dev` does not reliably detect renames and may generate drop + add.
-
-For tables containing real data, manually change the generated SQL to use `RENAME` instead of dropping/recreating data.
+`prisma migrate dev` does not reliably detect renames and may generate drop + add. For tables with real data, edit the generated SQL to use `RENAME`.
 
 ### Stale build files
-
-After dependency/type changes, stale build files can cause misleading errors.
 
 ```bash
 rm -rf dist *.tsbuildinfo
@@ -224,77 +236,35 @@ Do not delete `tsconfig.json`.
 
 ### DATABASE_URL
 
-Prisma loads `.env`, but shell commands such as `psql` require `DATABASE_URL` to be exported.
-
-An existing shell-level `DATABASE_URL` also overrides `.env`.
-
-When Prisma appears to use the wrong database:
-
-```bash
-echo $DATABASE_URL
-```
+Prisma loads `.env`, but shell tools such as `psql` need `DATABASE_URL` exported. A shell-level `DATABASE_URL` overrides `.env`. When Prisma seems to use the wrong database: `echo $DATABASE_URL`.
 
 ### Partial unique indexes
 
-Prisma does not provide native partial-unique-index syntax.
-
-For conditional constraints such as:
-
-```sql
-WHERE isSuperAdmin = true
-```
-
-create the migration with:
-
-```bash
-prisma migrate dev --name x --create-only
-```
-
-Then manually add the required SQL to the migration before applying it.
+Prisma has no native syntax for them. Create the migration with `pnpm prisma migrate dev --name x --create-only`, add the SQL by hand, then apply.
 
 ### Verify file changes
 
-Do not assume an editor/AI edit was actually written to disk.
-
-After important edits, verify with commands such as:
-
-```bash
-cat
-grep
-```
-
-especially before migrations or server restarts.
+Do not assume an edit reached the disk. Check with `cat` or `grep` before migrations or server restarts.
 
 ### IDs
 
-`Role.id` uses `uuid()`.
-
-All models should use UUID IDs consistently. A `cuid()`-style ID indicates legacy/inconsistent code.
+All models use `@default(uuid())`. A `cuid()` ID is legacy.
 
 ### Swagger
 
-`persistAuthorization: true` is intentionally enabled in `main.ts` so the bearer token survives page refresh.
-
-Do not remove it without a specific reason.
+`persistAuthorization: true` is intentionally enabled in `main.ts` so the bearer token survives a page refresh. The JSON is served at `/api-json`.
 
 ## Versioning
 
-Use Semantic Versioning.
-
-Current version: `v1.1.0`.
+Semantic Versioning. Current version: `0.1.0` (set in `package.json`).
 
 * PATCH → bug fixes
 * MINOR → backward-compatible features
 * MAJOR → breaking changes
 
-## New-project workflow
+## Referencesp
 
-See `SETUP.md` for the full clone-to-running workflow for starting a
-new project from this boilerplate, and `.env.example` for the
-expected environment variables.
-
-## Commands
-
-See `Project Commands.md` for the full development, Prisma, PostgreSQL, Git, and troubleshooting command reference.
-- Progress and task status: see `progress.md`.
-- Database structure: see `database.md` (generated from `prisma/schema.prisma`; update it in the same commit as any schema change).
+* Setup: `SETUP.md` and `.env.example`
+* Commands: `project-commands.md`
+* Tasks, API contract, decisions: `progress.md`
+* Schema: `database.md` (update it in the same commit as any schema change)

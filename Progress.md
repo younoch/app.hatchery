@@ -19,11 +19,13 @@ Known issue: `DELETE /user/:id` fails with FK error (P2003 → 500) for any user
 | 9 | Configurable refresh cookie Path | not started | Path hardcoded to /auth/refresh in auth.constants.ts | |
 | 10 | Revoke other sessions on password change | not started | PATCH /user/me/password does not revoke other refresh tokens | |
 | 11 | Decide: may unverified users log in? | not started | Currently yes; business rule not enforced | |
-| 12 | Water-quality domain: Organization, Tank, Reading models and endpoints | not started | Models NOT IMPLEMENTED | blocks Step 21 sync |
+| 12 | Water-quality domain: Tank, Reading (+ ReadingAudit) models and endpoints | not started | Models NOT IMPLEMENTED | blocks Step 21 sync; needs Task 17 (Organization) first |
 | 13 | Optional `User.name` (signup unchanged) | in progress | schema + getMe pending | |
 | 14 | `DELETE /user/:id`: clear RefreshToken/PasswordResetToken before delete; map P2003 to 409 instead of 500 | not started | `UserRepository.deleteUser`, `HttpExceptionFilter` | does not block Task 12 |
 | 15 | Env validation: `TOKEN_EXPIRATION` Zod default is `'3600'` (= 3.6s in jsonwebtoken); change to `'24h'` + format check | not started | env.validation.ts | |
 | 16 | Env validation: add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT` to Zod | not started | env.validation.ts | |
+| 17 | Organization model (id, name only) + User.organizationId + Tank.organizationId | not started | schema | part of Task 12 migration |
+| 18 | Admin transfer (super admin only): new admin gets `admin`, old admin gets a chosen role, one transaction, same organization | not started | new UserService method | needs Organization first |
 
 ## Verified API facts (frontend contract)
 | endpoint | method | auth | request | success response | notes |
@@ -89,6 +91,7 @@ Default roles: none seeded in code; must be created manually via API or DB.
 - 2026-10-15: Throttling hard-coded to 60s TTL / 100 limit globally; not using env vars.
 - 2026-10-17: User.name is optional (String?); signup (email + password) stays unchanged.
 - 2026-10-17: User deletion is super-admin-only for now. Domain-record deletion policy is deferred until the Organization module; Reading FKs stay required.
+
 ## Doc corrections
 - AGENTS.md line 155 said login returns refresh_token in body; code returns only access_token in body, refresh_token only in cookie.
 - README table showed env vars THROTTLE_TTL and THROTTLE_LIMIT with defaults; code hard-codes 60000ms and 100 limit, ignoring env.
@@ -96,6 +99,20 @@ Default roles: none seeded in code; must be created manually via API or DB.
 - progress.md pagination shape was wrong (said `data` + `total`); real shape is `items` + `meta` with totalPages/hasNextPage.
 - SETUP.md smoke test step 3 said login returns refresh_token in body; it is cookie-only.
 - TOKEN_EXPIRATION: AGENTS.md/README say 24h, env.example says 7d, Zod default is '3600'. Code fix tracked as Task 15.
+- 2026-10-17: Organization starts with id + name only. One admin per organization, always present (for now). Admin transfer is super-admin-only; the super admin chooses the previous admin's new role. Enforced in service layer.
+
+## Open decisions (settle in docs before the code that depends on them)
+| # | Decision | Blocks |
+|---|---|---|
+| 1 | Organization module endpoints (create org, assign user to org, transfer admin, rename) | Task 17, 18 |
+| 2 | Where the super-admin transfer-admin endpoint lives (new endpoint vs existing PATCH /user/:id/role) | Task 18 |
+| 3 | After Organization exists, should `assignRole` stop assigning `admin` entirely? | Task 18 |
+| 4 | Work order: Organization module before Readings | planning |
+| 5 | Reading rules: future-date limit, `isLate` threshold, `needsReview` condition | Task 12 |
+| 6 | Batch response shape (proposal: per item `{ id, status: created/duplicate/rejected, error? }`, whole batch always 200) | Task 12 |
+| 7 | Validation error contract `{ field, code, params }` and its code list | Task 6, 12 |
+| 8 | May unverified users log in? | Task 11 |
+| 9 | `TOKEN_EXPIRATION` default: `24h` or short (e.g. `15m`) leaning on refresh | Task 15 |
 
 ## Parking lot
 - Dead-letter/failed-job alerting beyond dashboard (Step 8 polish)
@@ -115,3 +132,11 @@ Default roles: none seeded in code; must be created manually via API or DB.
 - Domain models: Organization, Tank, Reading, ReadingAudit (blocks Step 21 sync)
 - Revisit user-deletion policy (soft delete vs snapshot) when Organization module is designed
 - PATCH /user/me to edit name
+- Organization: extra fields and its own module (controller/service/permissions)
+- Enforce one-admin-per-org at DB level (e.g. Organization.adminId @unique) if the service-layer rule proves fragile
+- Task 14 must also refuse to delete an organization's admin until the role is transferred (super admin deletes; still must not leave an org without admin)
+- OPEN (decide when designing Organization module): where the super-admin transfer-admin endpoint lives (new endpoint vs existing PATCH /user/:id/role)
+- OPEN (same time): once Organization exists, should `assignRole` stop assigning the `admin` role entirely, leaving only the transfer endpoint? (Leaving it open allows a second admin in one org.)
+- Seed script (`prisma/seed.ts`) for roles + super admin, needed before removing public signup
+- Reposition docs: README intro/Description, SETUP.md, `.env.example` DB name (`nestjs_boilerplate_db`), package.json name/version
+- Configurable refresh cookie `Path` (frontend request F→B-06); today it is hard-coded to `/auth/refresh` in `auth.constants.ts`
