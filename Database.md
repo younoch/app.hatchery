@@ -23,7 +23,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 |---|---|---|---|
 | T1 | Rewrite the six docs for the hatchery design | in progress (this commit) | |
 | T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; fix `THROTTLE_TTL` unit; `.env.example` and README table match | not started | |
-| T3 | `@Throttle` on `/auth/login`: 10 per minute per IP | not started | |
+| T3 | `@Throttle` on `/auth/login`: 10 per minute per IP; the 429 carries a `Retry-After` header (seconds) and the `main.ts` CORS config exposes it (`exposedHeaders: ['Retry-After']`) so the browser can read it | not started | |
 | T4 | Rename controller `/user` → `/users` (and `/user/me` → `/users/me`); update docs and Swagger; the frontend changes its paths in the same step | not started | |
 | T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings | not started | |
 | T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants | not started | |
@@ -51,7 +51,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /auth/logout` | cookie | — | `{ message }` | implemented but unusable from a browser (wrong cookie Path); see parking lot |
 | `POST /auth/register`, `/auth/register-async` | none | `{ email, password }` | user / `{ message }` (202) | implemented; being removed (T13) |
 | `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 `email_disabled` when email is off (T13) |
-| `GET /users/me` | Bearer | — | `{ id, email, username, name, isSuperAdmin, organizationId, permissions, mustChangePassword, role: { name } \| null }` | planned (T4, T8); today `/user/me` returns `{ id, email, role: { name, permissions } }` |
+| `GET /users/me` | Bearer | — | `{ id, email, username, name, isSuperAdmin, organizationId, permissions (always an array, never missing), mustChangePassword, role: { name } \| null }` | planned (T4, T8); today `/user/me` returns `{ id, email, role: { name, permissions } }` |
 | `PATCH /users/me/password` | Bearer | `{ currentPassword, newPassword }` | `{ message }` | implemented as `/user/me/password` (T4); also clears `mustChangePassword`, revokes other sessions (T11, T16) |
 | `GET /users` | `user:read` | `page, pageSize, organizationId` | `{ items, meta }` (below) | implemented as global list; org-scoped (T11) |
 | `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | user | planned (T11). `roleId` can never be `admin` |
@@ -64,7 +64,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | planned (T10) |
 | `GET /organization-roles` | `organization-role:read` | `organizationId` (super admin) | `[{ id, roleId, name, permissions, editable }]` | planned (T12) |
 | `PATCH /organization-roles/:id` | `organization-role:write` | `{ permissions }` (org-level keys only; `admin` row rejected) | the row | planned (T12) |
-| `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` | planned (T14) |
+| `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; not paginated) | planned (T14) |
 | `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name }`; `{ name?, isActive? }` | tank | planned (T14) |
 | `POST /readings/sync` | `reading:create` | see below | see below | planned (T15) |
 | `GET /health` | none | — | `{ status, info, error, details }` | implemented |
@@ -131,7 +131,7 @@ Server rules:
 | `not_found`, `tank_not_found` | 404 | missing or outside your organization |
 | `id_conflict`, `recorded_at_in_future` | item level (sync) | see Readings sync |
 | `email_disabled` | 503 | email features are switched off |
-| `rate_limited` | 429 | throttled |
+| `rate_limited` | 429 | throttled; the response has a `Retry-After` header (seconds), exposed through CORS |
 
 ## Decisions log
 

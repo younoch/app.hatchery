@@ -55,3 +55,8 @@ It records what each side asks of the other (requests and demands), what it reco
 | F→B-10 | 2026-10-17 | Notice | The login endpoint showed no 429 after 12 calls; the README claim of a strict limit was wrong | done | Docs corrected; limit added in T3 |
 | F→B-11 | 2026-10-17 | Notice | The refresh lifetime is sliding, not fixed as the docs said | done | Docs corrected; absolute maximum age is in the parking lot |
 | F→B-12 | 2026-10-17 | Request | Tanks backend-driven after client feedback | accepted | T14 |
+| F→B-13 | 2026-10-20 | Request | Stable machine codes, all listed in `progress.md`: `session_revoked`, `user_inactive`, `permission_denied`, `must_change_password`, and a code for a user without an organization (403 on sync) | accepted | All five codes are in backend `progress.md` → Error codes; no-organization code is `no_organization`. T6, T8, T16 |
+| F→B-14 | 2026-10-20 | Request | `GET /users/me`: `permissions` is always an array (never missing); `role` is `{ name }` or `null` | accepted | Empty array when there are no permissions. T8 |
+| F→B-15 | 2026-10-20 | Request | `GET /tanks` returns at least `id`, `name`, `isActive`; inactive tanks stay in the response; any organization member can read it | accepted | Plain array, not paginated. T14 |
+| F→B-16 | 2026-10-20 | Request | Sync `duplicate` results carry `identical: true or false` |  accepted | Frontend warns when `false`. T15 |
+| F→B-17 | 2026-10-20 | Request | Login 429 includes a `Retry-After` header | accepted | Header set by the throttler; backend also exposes it through CORS (`Access-Control-Expose-Headers`). T3 |
