@@ -160,7 +160,7 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 * **Admin transfer** (`organization:transfer-admin`, super admin): the new admin must be an active user of the same organization; the previous admin gets a role chosen by the super admin (not `admin`); one transaction.
 * **Deactivation.** `isActive = false` blocks login and refresh and revokes all of the user's refresh tokens. Nobody can deactivate themselves.
 * **Delete user** — super admin only; not yourself; not the organization's admin. A user who owns readings cannot be deleted (foreign-key block → 409).
-* **Passwords.** The admin creates users with a temporary password and `mustChangePassword = true`. Admin-driven reset (`user:reset-password`, default only the `admin` role) sets a temporary password, `mustChangePassword = true`, and revokes all sessions. Only the super admin can reset an organization's admin. A password change clears `mustChangePassword` and revokes the user's other sessions.
+* **Passwords.** The admin creates users with a temporary password and `mustChangePassword = true`. Admin-driven reset (`user:reset-password`, default only the `admin` role) sets a temporary password, `mustChangePassword = true`, and revokes all sessions. Only the super admin can reset an organization's admin. A password change clears `mustChangePassword`, revokes all of the user's existing refresh tokens, and returns a fresh access token plus refresh cookie (the cookie Path is `/auth/refresh`, so this endpoint cannot tell which token is the current one).
 * **Usernames.** Chosen by the admin, never changed by the user. Lowercase `a-z 0-9 . _ -`, 3–30 characters, globally unique, normalized to lowercase before lookup.
 * **Own account.** A user cannot delete or deactivate their own account.
 * **Admin-action log.** Each of these writes one structured pino line `{ action, actorId, organizationId, targetId }`: organization create, user create, role change, deactivate/activate, password reset, admin transfer, organization-role update (planned, T17; no new table yet).
@@ -199,6 +199,7 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 
 * Envelope: `{ success: false, statusCode, code, path, message, errors?, timestamp }`.
 * `code` is a stable machine code (snake_case) and is what the frontend maps to i18n text. `message` is English developer text and is never shown to users.
+* A validation error has `code: validation_failed` at the top and the details in `errors[]`.
 * Field problems come as `errors: [{ field, code, params }]`. The code list is in `progress.md` → Error codes.
 * Today (current): Nest's default validation shape (`message` as an array of strings) and no `code`. Planned in T6.
 * `HttpExceptionFilter` maps Prisma errors: `P2025` → 404, `P2002` → 409, `P2003` → 409 (planned).

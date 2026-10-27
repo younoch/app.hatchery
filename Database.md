@@ -24,11 +24,11 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T1 | Rewrite the six docs for the hatchery design | in progress (this commit) | |
 | T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; fix `THROTTLE_TTL` unit; `.env.example` and README table match | not started | |
 | T3 | `@Throttle` on `/auth/login`: 10 per minute per IP; the 429 carries a `Retry-After` header (seconds) and the `main.ts` CORS config exposes it (`exposedHeaders: ['Retry-After']`) so the browser can read it | not started | |
-| T4 | Rename controller `/user` → `/users` (and `/user/me` → `/users/me`); update docs and Swagger; the frontend changes its paths in the same step | not started | |
+| T4 | Rename controller `/user` → `/users` (and `/user/me` → `/users/me`); update docs and Swagger. Done together with T8 as one breaking release for the frontend (paths, username login, new `/users/me`): until then the old `/user…` paths and email login must keep working | not started | T8 |
 | T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings | not started | |
 | T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants | not started | |
 | T7 | Permission map refactor (per-resource actions, platform vs org scope); resolver stays on `Role.permissions` until T10 | not started | |
-| T8 | User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | not started | T6, T7 |
+| T8 | (released together with T4) User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | not started | T6, T7 |
 | T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | not started | T7, T8 |
 | T10 | `Organization`, `OrganizationRole`, `User.organizationId`; `resolveOrganizationId`; `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; resolver switches to `OrganizationRole`; `assignRole` can no longer assign `admin` | not started | T8, T9 |
 | T11 | Admin user management: `POST /users`, `PATCH /users/:id`, `POST /users/:id/reset-password`, `GET /users?organizationId=`; `mustChangePassword` enforcement | not started | T10 |
@@ -36,7 +36,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | not started | T9, T11 |
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10 |
 | T15 | `Reading` model; `POST /readings/sync` | not started | T6, T14 |
-| T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke sessions on password change, reset and deactivation | not started | T8 (best before T15) |
+| T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | not started | T8 (best before T15) |
 | T17 | Structured admin-action log lines | not started | T10, T11 |
 
 ## API contract
@@ -52,7 +52,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /auth/register`, `/auth/register-async` | none | `{ email, password }` | user / `{ message }` (202) | implemented; being removed (T13) |
 | `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 `email_disabled` when email is off (T13) |
 | `GET /users/me` | Bearer | — | `{ id, email, username, name, isSuperAdmin, organizationId, permissions (always an array, never missing), mustChangePassword, role: { name } \| null }` | planned (T4, T8); today `/user/me` returns `{ id, email, role: { name, permissions } }` |
-| `PATCH /users/me/password` | Bearer | `{ currentPassword, newPassword }` | `{ message }` | implemented as `/user/me/password` (T4); also clears `mustChangePassword`, revokes other sessions (T11, T16) |
+| `PATCH /users/me/password` | Bearer | `{ currentPassword, newPassword }` | `{ message, access_token }` + new `refresh_token` cookie | implemented as `/user/me/password` returning `{ message }` (T4); T11/T16: clears `mustChangePassword`, revokes all older refresh tokens, issues a fresh pair (the cookie Path means the endpoint cannot tell which token is the current one) |
 | `GET /users` | `user:read` | `page, pageSize, organizationId` | `{ items, meta }` (below) | implemented as global list; org-scoped (T11) |
 | `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | user | planned (T11). `roleId` can never be `admin` |
 | `PATCH /users/:id` | `user:write` | `{ roleId?, isActive?, name? }` | user | planned (T11) |
@@ -64,7 +64,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | planned (T10) |
 | `GET /organization-roles` | `organization-role:read` | `organizationId` (super admin) | `[{ id, roleId, name, permissions, editable }]` | planned (T12) |
 | `PATCH /organization-roles/:id` | `organization-role:write` | `{ permissions }` (org-level keys only; `admin` row rejected) | the row | planned (T12) |
-| `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; not paginated) | planned (T14) |
+| `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; not paginated). Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | planned (T14) |
 | `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name }`; `{ name?, isActive? }` | tank | planned (T14) |
 | `POST /readings/sync` | `reading:create` | see below | see below | planned (T15) |
 | `GET /health` | none | — | `{ status, info, error, details }` | implemented |
@@ -81,7 +81,9 @@ Request: `{ items: [{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxy
 
 Response `data`: `{ results: [{ id, status, identical?, errors? }], totals: { created, duplicate, rejected } }`. HTTP 200 for any well-formed request, even when every item is rejected (the server logs a warning then).
 
-Whole-request failures: 400 if `items` is missing, not an array, empty, longer than 100, or an `id` is not a UUID; 401 session ended; 403 `permission_denied` or `no_organization`. Pending items stay pending on 401/403/5xx and on network errors.
+Whole-request failures: 400 if `items` is missing, not an array, empty, longer than 100, or an `id` is not a UUID; 401 session ended; 403 `permission_denied` or `no_organization`. Pending items stay pending on 401/403/429/5xx and on network errors; on 429 wait for the `Retry-After` header before retrying.
+
+The body limit is 100 KB (Express default); above it, 413 `payload_too_large`. A whole-request 400 uses the normal error envelope with `code: validation_failed` and `errors: [{ field, code, params }]`, where `field` is a path (`items`, `items.2.id`). Inside `results`, item `field` values are bare names (`ph`, `tankId`, `note`). HTTP 400 means the chunk is bad and nothing was processed; HTTP 200 with `rejected` means that item is bad. Params: `too_long { max }`, `too_short { min }`, `out_of_range { min, max }`. A malformed `tankId` is `invalid_uuid`, a missing one `required`, a note over 200 characters `too_long { max: 200 }`.
 
 Per item:
 
@@ -132,6 +134,8 @@ Server rules:
 | `id_conflict`, `recorded_at_in_future` | item level (sync) | see Readings sync |
 | `email_disabled` | 503 | email features are switched off |
 | `rate_limited` | 429 | throttled; the response has a `Retry-After` header (seconds), exposed through CORS |
+| `validation_failed` | 400 | top-level code of a validation error; the details are in `errors[]` |
+| `payload_too_large` | 413 | request body over 100 KB |
 
 ## Decisions log
 

@@ -140,3 +140,4 @@ Default roles: none seeded in code; must be created manually via API or DB.
 - Seed script (`prisma/seed.ts`) for roles + super admin, needed before removing public signup
 - Reposition docs: README intro/Description, SETUP.md, `.env.example` DB name (`nestjs_boilerplate_db`), package.json name/version
 - Configurable refresh cookie `Path` (frontend request F→B-06); today it is hard-coded to `/auth/refresh` in `auth.constants.ts`
+  +* Swagger response schemas (`@ApiProperty`/`@ApiResponse` on response DTOs), so generated frontend types become possible (frontend declined type generation for now: B→F-12)

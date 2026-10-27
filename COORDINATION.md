@@ -38,6 +38,10 @@ It records what each side asks of the other (requests and demands), what it reco
 | B→F-14 | 2026-10-20 | Question | Retry policy in plan section 8b: backoff values and maximum attempts | open | |
 | B→F-15 | 2026-10-20 | Notice | The sync endpoint is `POST /readings/sync`. "Batch" is reserved for the production batch of Step 25 | open | |
 | B→F-16 | 2026-10-20 | Notice | The frontend does not implement signup; backend signup is being removed. Users are created by the super admin (first admin) and org admins | open | T13 |
+| B→F-17 | 2026-10-26 | Request | When `organizationId` from `GET /users/me` is null (super admin), do not call `GET /tanks` or `POST /readings/sync`; show an empty state | open | T14, T15 |
+| B→F-18 | 2026-10-26 | Request | `PATCH /users/me/password` returns `{ message, access_token }` and sets a new refresh cookie; replace the stored access token, no extra refresh or login | open | T11, T16 |
+| B→F-19 | 2026-10-26 | Request | Treat 429 on `POST /readings/sync` as transient: keep the items pending and retry after the `Retry-After` header; never mark items `failed` because of it | open | T3, T15 |
+| B→F-20 | 2026-10-26 | Notice | Backend delivers T4 (`/users` paths) and T8 (username login, new `/users/me`) as one release; until then `/user…` paths and email login keep working | open | Answers the "switch together" notes in B→F-01 and B→F-02 |
 
 ## Frontend → Backend
 
@@ -60,3 +64,8 @@ It records what each side asks of the other (requests and demands), what it reco
 | F→B-15 | 2026-10-20 | Request | `GET /tanks` returns at least `id`, `name`, `isActive`; inactive tanks stay in the response; any organization member can read it | accepted | Plain array, not paginated. T14 |
 | F→B-16 | 2026-10-20 | Request | Sync `duplicate` results carry `identical: true or false` |  accepted | Frontend warns when `false`. T15 |
 | F→B-17 | 2026-10-20 | Request | Login 429 includes a `Retry-After` header | accepted | Header set by the throttler; backend also exposes it through CORS (`Access-Control-Expose-Headers`). T3 |
+| F→B-18 | 2026-10-25 | accepted | Sync chunks: please state in `progress.md` the request body size limit and the exact whole-request 400 shape (`{ field, code, params }`), so the client can tell a bad chunk from a bad item | open | Step 21 |
+| F→B-19 | 2026-10-25 | accepted | `POST /readings/sync` must accept the same item again after a `rejected` result (same `id`, corrected values) and treat it as new | open | Fix-and-resend (Step 18c) |
+| F→B-20 | 2026-10-25 | accepted | Add the error code for a malformed or missing `tankId` format and for a note longer than 200 characters to the code list (`note_too_long` or the generic `out_of_range` with params) | open | The client schema and server must show the same message |
+| F→B-21 | 2026-10-25 | accepted | Does `GET /tanks` need the user's organization membership only, and what does it return for the super admin (no organization)? | open | Tank screen and the super admin's empty state |
+| F→B-22 | 2026-10-25 | accepted | After `must_change_password` is cleared by `PATCH /users/me/password`, does the response return a new access token, or must the client call refresh or login again? | open | Forced password screen flow |
