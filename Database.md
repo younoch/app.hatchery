@@ -23,7 +23,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 |---|---|---|---|
 | T1 | Rewrite the six docs for the hatchery design | in progress (this commit) | |
 | T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; fix `THROTTLE_TTL` unit; `.env.example` and README table match | not started | |
-| T3 | `@Throttle` on `/auth/login`: 10 per minute per IP; the 429 carries a `Retry-After` header (seconds) and the `main.ts` CORS config exposes it (`exposedHeaders: ['Retry-After']`) so the browser can read it | not started | |
+| T3 | Rate limits per the "Rate limits" table (user-id tracker from the verified JWT `sub`, IP fallback; the global throttler runs before controller guards, so the tracker cannot rely on `req.user`); 429 carries `Retry-After`, exposed through CORS | not started | |
 | T4 | Rename controller `/user` → `/users` (and `/user/me` → `/users/me`); update docs and Swagger. Done together with T8 as one breaking release for the frontend (paths, username login, new `/users/me`): until then the old `/user…` paths and email login must keep working | not started | T8 |
 | T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings | not started | |
 | T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants | not started | |
@@ -79,11 +79,12 @@ Error envelope: see `AGENTS.md` → Error contract. Today: `{ success:false, sta
 
 Request: `{ items: [{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxygenMgL, note? }] }`, 1–100 items (the frontend sends 20–50 per call on weak networks). `id` is a client UUID v4, `recordedAt` is ISO 8601.
 
-Response `data`: `{ results: [{ id, status, identical?, errors? }], totals: { created, duplicate, rejected } }`. HTTP 200 for any well-formed request, even when every item is rejected (the server logs a warning then).
+Response `data`: `{ results: [{ index, id?, status, identical?, errors? }], totals: { created, duplicate, rejected } }`. HTTP 200 for any well-formed request, even when every item is rejected (the server logs a warning then).
+`index` is the item's position in the request (always present); `id` is echoed only when the item had a string `id`. Match results by `index`.
 
-Whole-request failures: 400 if `items` is missing, not an array, empty, longer than 100, or an `id` is not a UUID; 401 session ended; 403 `permission_denied` or `no_organization`. Pending items stay pending on 401/403/429/5xx and on network errors; on 429 wait for the `Retry-After` header before retrying.
+Whole-request failures: 400 only if the envelope is bad: `items` missing, not an array, empty, or longer than 100 (a bad item never causes a 400, it comes back `rejected`); 401 session ended; 403 `permission_denied` or `no_organization`. Pending items stay pending on 401/403/429/5xx and on network errors; on 429 wait for the `Retry-After` header before retrying.
 
-The body limit is 100 KB (Express default); above it, 413 `payload_too_large`. A whole-request 400 uses the normal error envelope with `code: validation_failed` and `errors: [{ field, code, params }]`, where `field` is a path (`items`, `items.2.id`). Inside `results`, item `field` values are bare names (`ph`, `tankId`, `note`). HTTP 400 means the chunk is bad and nothing was processed; HTTP 200 with `rejected` means that item is bad. Params: `too_long { max }`, `too_short { min }`, `out_of_range { min, max }`. A malformed `tankId` is `invalid_uuid`, a missing one `required`, a note over 200 characters `too_long { max: 200 }`.
+The body limit is 100 KB (Express default); above it, 413 `payload_too_large`. A whole-request 400 uses the normal error envelope with `code: validation_failed` and `errors: [{ field, code, params }]`, where `field` is `items`. Inside `results`, item `field` values are bare names (`ph`, `tankId`, `note`). HTTP 400 means the chunk is bad and nothing was processed; HTTP 200 with `rejected` means that item is bad. Params: `too_long { max }`, `too_short { min }`, `out_of_range { min, max }`. A malformed `tankId` is `invalid_uuid`, a missing one `required`, a note over 200 characters `too_long { max: 200 }`.
 
 Per item:
 
