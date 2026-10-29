@@ -9,7 +9,7 @@ The frontend is a separate repo (`hatchery-frontend`: Vue 3, offline-first PWA, 
 1. `AGENTS.md` — rules and conventions (this file)
 2. `progress.md` — tasks, API contract, error codes, decisions, parking lot
 3. `database.md` — schema (target state, with status markers)
-4. `COORDINATION.md` — open requests between frontend and backend (temporary; deleted at project end)
+4. `COORDINATION.md` — frontend ↔ backend log (temporary; deleted when the project ends)
 
 Each fact lives in one file: rules here, schema in `database.md`, tasks/contract/decisions in `progress.md`, the environment table in `README.md`.
 
@@ -176,6 +176,8 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 * Access token lifetime: `TOKEN_EXPIRATION`, default `1h`.
 * Password policy: at least one letter and one number.
 * Login rate limit: 10 requests per minute per IP on `/auth/login` (planned, T3). A 429 returns `code: rate_limited` and a `Retry-After` header that CORS exposes to the browser.
+* Login rate limit: 10 requests per minute per IP on `/auth/login` (planned, T3).
+* Rate limits (planned, T3): routes with a valid token are limited per user id (default 120/min; `POST /readings/sync` 30/min); `/auth/login` 10/min per IP; `/auth/refresh` 60/min per IP; other tokenless routes 100/min per IP. Authenticated traffic is never limited by IP, because field staff share one public IP. Values: `progress.md` → Rate limits.
 
 ### Refresh tokens
 
@@ -212,6 +214,8 @@ The full contract is in `progress.md`. The rules that must never break:
 * The client never sends `createdById`, `syncedAt` or `organizationId`. The server derives them (token and `now()`).
 * The client UUID is the primary key and the idempotency key. The first write wins; a repeat from the same user is a `duplicate`, never an overwrite.
 * A tank must belong to the caller's organization (super admin: any); otherwise `tank_not_found`.
+* The sync DTO validates only the envelope (`items` is a non-empty array of at most 100; body at most 100 KB). Never use `@ValidateNested` there: items are validated in the service, so one bad item never blocks its chunk.
+* Only a bad envelope is HTTP 400 (`validation_failed`, `field: items`). Every item problem is a per-item `rejected`. Every result carries `index`; `id` is echoed only when the item had a string `id`.
 
 ## Environment variables
 

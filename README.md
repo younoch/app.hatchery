@@ -47,7 +47,7 @@ PostgreSQL, Redis and Mailpit run as native local services on Fedora; no Docker 
 * **Global exception handling** — `HttpExceptionFilter` maps Prisma errors to HTTP codes and logs with pino.
 * **Consistent response shape** — `ResponseInterceptor` wraps every response as `{ success, statusCode, data, timestamp }`.
 * **Generic pagination** — `PaginationQueryDto` / `PaginatedResult` / `paginate()`.
-* **Rate limiting** — a global throttle of 100 requests per 60 s is hard-coded in `app.module.ts`. A stricter limit on `/auth/login` is planned (T3).
+* **Rate limiting** — today a global throttle of 100 requests per 60 s per IP is hard-coded in `app.module.ts`. Per-route limits, keyed by user id on authenticated routes, are planned (T3): see `progress.md` → Rate limits.
 * **Multi-tenant by organization** — see `AGENTS.md` → Tenant isolation.
 
 ## Features
@@ -96,7 +96,6 @@ cp .env.example .env
 | `PASSWORD_RESET_EXPIRATION` | — | `15` | Minutes; only used when email is enabled. Not yet in the Zod schema (T2) |
 | `READING_FUTURE_TOLERANCE_MS` | — | `600000` | Planned (T15). How far in the future `recordedAt` may be |
 | `LOG_LEVEL` | — | — | |
-| `THROTTLE_TTL` / `THROTTLE_LIMIT` | — | — | Reserved: the code hard-codes 60 s / 100 and ignores them. Unit mismatch to fix in T2 |
 | `SEED_SUPER_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | — | — | Planned (T9). Read only by `prisma/seed.ts` |
 
 Run migrations:

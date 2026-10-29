@@ -22,11 +22,11 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | # | Task | Status | Depends on |
 |---|---|---|---|
 | T1 | Rewrite the six docs for the hatchery design | in progress (this commit) | |
-| T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; fix `THROTTLE_TTL` unit; `.env.example` and README table match | not started | |
+| T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; remove `THROTTLE_TTL`/`THROTTLE_LIMIT` (limits are per-route constants, see Rate limits); `.env.example` and the README table match the Zod schema | not started | |
 | T3 | Rate limits per the "Rate limits" table (user-id tracker from the verified JWT `sub`, IP fallback; the global throttler runs before controller guards, so the tracker cannot rely on `req.user`); 429 carries `Retry-After`, exposed through CORS | not started | |
 | T4 | Rename controller `/user` → `/users` (and `/user/me` → `/users/me`); update docs and Swagger. Done together with T8 as one breaking release for the frontend (paths, username login, new `/users/me`): until then the old `/user…` paths and email login must keep working | not started | T8 |
 | T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings | not started | |
-| T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants | not started | |
+| T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants; validation errors carry the top-level code `validation_failed`; oversized bodies answer 413 `payload_too_large` | not started | |
 | T7 | Permission map refactor (per-resource actions, platform vs org scope); resolver stays on `Role.permissions` until T10 | not started | |
 | T8 | (released together with T4) User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | not started | T6, T7 |
 | T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | not started | T7, T8 |
@@ -106,12 +106,19 @@ Server rules:
 
 ### Changes the frontend must follow
 
-* Paths: `/user…` → `/users…`; login field `username` (lowercase); `GET /users/me` shape with top-level `permissions`.
-* Tanks come from `GET /tanks` (cache in Dexie), not from a fixed config file.
-* New screen: forced password change when `mustChangePassword` is true.
-* Map error `code` values to i18n keys; never display `message`.
-* Handle 401 `user_inactive` ("account closed, contact your administrator") separately from `session_revoked`.
-* The frontend does not implement signup.
+See the Backend → Frontend rows in `COORDINATION.md`. This file keeps only the contract.
+
+## Rate limits (T3)
+
+| route | key | limit per minute |
+|---|---|---|
+| routes with a valid token (default) | user id | 120 |
+| `POST /readings/sync` | user id | 30 |
+| `POST /auth/login` | IP | 10 |
+| `POST /auth/refresh` | IP | 60 |
+| everything else without a token | IP | 100 |
+
+Field staff often share one public IP, so authenticated traffic is never limited by IP. Per-username login lockout stays in the parking lot.
 
 ## Error codes (starter list, finalized in T6)
 
@@ -153,6 +160,8 @@ Server rules:
 * 2026-10-18: Super admin can act in any organization but must name it; there are no global lists. `reading:read-all` is separate from `reading:create`.
 * 2026-10-19: Access token default lifetime `1h`; login throttle 10/min/IP; refresh absolute max age deferred. `/user` renamed to `/users`.
 * 2026-10-20: Auth tables cascade on user delete; domain records restrict.
+* 2026-10-26: `/user` → `/users` ships together with username login and the new `/users/me` as one breaking release (T4 + T8). A password change returns a fresh access token and refresh cookie and revokes all older refresh tokens.
+* 2026-10-28: Rate limits are per route; authenticated routes are keyed by user id (field staff share a public IP). Sync: only a bad envelope is a 400; every item problem is a per-item `rejected`; results carry `index`.
 
 ## Open decisions
 
@@ -169,7 +178,8 @@ Server rules:
 * Pull sync (cursor `syncedAt`, not `recordedAt`), `GET /readings` (organization-wide, `reading:read-all`), dashboard index `[tankId, recordedAt]`
 * Email: switch-on checklist, verification flow, email-based reset, invitation flow
 * Deployment: one registrable domain with `app.` and `api.` subdomains (cookie `SameSite=lax`); production checklist (HTTPS, backups, secrets)
-* Generate frontend types from the Swagger JSON (`/api-json`)
+* Swagger response schemas (`@ApiProperty`/`@ApiResponse` on response DTOs) so frontend types can be generated from `/api-json` (frontend declined type generation for now: B→F-12)
+* Configurable refresh cookie `Path` (frontend request F→B-06); today it is hard-coded to `/auth/refresh` in `auth.constants.ts`
 * Login throttle per username in addition to per IP
 * Fix or remove `POST /auth/logout` (the cookie Path means browsers never send the cookie)
 * `PATCH /users/me` (edit own name)
