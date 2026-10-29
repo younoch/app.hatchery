@@ -53,18 +53,6 @@ const envSchema = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
       .default('info'),
-
-    THROTTLE_TTL: z
-      .string()
-      .default('60000')
-      .transform((val) => parseInt(val, 10))
-      .pipe(z.number().int().positive()),
-
-    THROTTLE_LIMIT: z
-      .string()
-      .default('100')
-      .transform((val) => parseInt(val, 10))
-      .pipe(z.number().int().positive()),
     REDIS_HOST: z.string().default('localhost'),
     REDIS_PORT: z.coerce.number().default(6379),
     APP_URL: z.string().url().default('http://localhost:4000'),
