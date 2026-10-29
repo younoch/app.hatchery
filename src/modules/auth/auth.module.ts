@@ -27,7 +27,9 @@ import { RepositoriesModule } from '@/common/repositories/repositories.module';
         const expiresIn = configService.get<string>('TOKEN_EXPIRATION', '24h');
         return {
           secret: secret,
-          signOptions: { expiresIn: expiresIn as `${number}${'s' | 'm' | 'h' | 'd'}` },
+          signOptions: {
+            expiresIn: expiresIn as `${number}${'s' | 'm' | 'h' | 'd'}`,
+          },
         };
       },
     }),

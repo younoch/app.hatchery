@@ -18,7 +18,10 @@ export class PaginationQueryDto {
   @Max(100)
   pageSize: number = 10;
 
-  @ApiPropertyOptional({ default: false, description: 'Include soft-deleted records' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Include soft-deleted records',
+  })
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()

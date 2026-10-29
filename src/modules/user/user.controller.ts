@@ -29,7 +29,7 @@ export class UserController {
     return this.userService.getMe(user.userId);
   }
 
-    @RequirePermission('user:read')
+  @RequirePermission('user:read')
   @UseGuards(PermissionsGuard)
   @Get()
   async listUsers(@Query() query: PaginationQueryDto) {

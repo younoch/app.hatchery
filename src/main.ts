@@ -69,7 +69,5 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
 
   await app.listen(port);
-  
 }
 bootstrap();
-

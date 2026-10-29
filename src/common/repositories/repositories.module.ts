@@ -6,7 +6,15 @@ import { RefreshTokenRepository } from './refresh-token.repository';
 
 @Module({
   imports: [PrismaModule],
-  providers: [UserRepository, PasswordResetTokenRepository, RefreshTokenRepository],
-  exports: [UserRepository, PasswordResetTokenRepository, RefreshTokenRepository],
+  providers: [
+    UserRepository,
+    PasswordResetTokenRepository,
+    RefreshTokenRepository,
+  ],
+  exports: [
+    UserRepository,
+    PasswordResetTokenRepository,
+    RefreshTokenRepository,
+  ],
 })
 export class RepositoriesModule {}

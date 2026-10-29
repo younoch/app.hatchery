@@ -1,6 +1,15 @@
-import { IsArray, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PERMISSIONS, Permission } from '@/common/permissions/permission.constants';
+import {
+  PERMISSIONS,
+  Permission,
+} from '@/common/permissions/permission.constants';
 
 export class CreateRoleDto {
   @ApiProperty({ example: 'editor' })
