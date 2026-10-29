@@ -56,7 +56,33 @@ const envSchema = z
     REDIS_HOST: z.string().default('localhost'),
     REDIS_PORT: z.coerce.number().default(6379),
     APP_URL: z.string().url().default('http://localhost:4000'),
-    TOKEN_EXPIRATION: z.string().default('3600'),
+    TOKEN_EXPIRATION: z
+      .string()
+      .regex(
+        /^\d+[smhd]$/,
+        'TOKEN_EXPIRATION must be a number with a unit, e.g. 15m, 1h, 7d',
+      )
+      .default('1h'),
+    PASSWORD_RESET_EXPIRATION: z.coerce.number().int().positive().default(15),
+
+    EMAIL_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    SMTP_HOST: z.string().default('localhost'),
+    SMTP_PORT: z.coerce.number().int().positive().default(1025),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    SMTP_SECURE: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+
+    READING_FUTURE_TOLERANCE_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(600000),
   })
   .superRefine((env, context) => {
     const secure =

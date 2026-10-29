@@ -78,24 +78,29 @@ Start Mailpit manually when testing email flows: `mailpit` (UI: http://localhost
 cp .env.example .env
 ```
 
+Every variable the code reads is validated at startup in `src/config/env.validation.ts` (Zod); a wrong value stops the app with `Invalid environment configuration`. Keep this table, the schema and `.env.example` identical.
+
 | Variable | Required | Default | Notes |
 |---|---|---|---|
+| `NODE_ENV` | — | `development` | `development`, `production` or `test` |
+| `PORT` | — | `3000` | The dev `.env` sets `4000` |
 | `DATABASE_URL` | yes | — | Postgres connection string |
 | `JWT_SECRET` | yes | — | No fallback; fails fast if missing |
-| `TOKEN_EXPIRATION` | — | `1h` | Access-token lifetime, must carry a unit (`15m`, `1h`). Set it explicitly in production. The current Zod default `3600` is a bug (read as milliseconds); fix in T2 |
+| `TOKEN_EXPIRATION` | — | `1h` | Access-token lifetime. Must be a number with a unit (`15m`, `1h`, `7d`); a bare number such as `3600` is rejected at startup, because `jsonwebtoken` would read it as milliseconds. Set it explicitly in production |
 | `REFRESH_TOKEN_TTL_MS` | — | `1209600000` | Refresh token lifetime and cookie max-age (14 days), counted from each rotation |
-| `COOKIE_SECURE` | — | `false` locally, `true` in production | `true` for HTTPS |
-| `COOKIE_SAME_SITE` | — | `lax` | `none` needs `COOKIE_SECURE=true`; prefer one registrable domain with `lax` |
-| `FRONTEND_URL` | — | `http://localhost:3000` | Default allowed browser origin |
-| `CORS_ORIGINS` | — | `FRONTEND_URL` | Comma-separated allowed origins for credentialed CORS |
+| `COOKIE_SECURE` | — | `false` locally, `true` in production | `true` for HTTPS. Must be `true` in production |
+| `COOKIE_SAME_SITE` | — | `lax` | `strict`, `lax` or `none`. `none` needs `COOKIE_SECURE=true`; prefer one registrable domain with `lax` |
+| `FRONTEND_URL` | — | `http://localhost:3000` | Default allowed browser origin. No wildcard |
+| `CORS_ORIGINS` | — | `FRONTEND_URL` | Comma-separated allowed origins for credentialed CORS. No wildcard |
 | `APP_URL` | — | `http://localhost:4000` | Used to build links in emails |
 | `REDIS_HOST` / `REDIS_PORT` | — | `localhost` / `6379` | |
-| `EMAIL_ENABLED` | — | `false` | Planned (T13). When false, forgot/reset/verify answer 503 `email_disabled` |
+| `EMAIL_ENABLED` | — | `false` | Validated since T2; the gating itself lands in T13. When false, forgot/reset/verify answer 503 `email_disabled` |
 | `SMTP_HOST` / `SMTP_PORT` | — | `localhost` / `1025` | Mailpit in dev |
-| `SMTP_USER` / `SMTP_PASS` / `SMTP_SECURE` | — | — | Planned (T2). Needed for a real provider |
-| `PASSWORD_RESET_EXPIRATION` | — | `15` | Minutes; only used when email is enabled. Not yet in the Zod schema (T2) |
-| `READING_FUTURE_TOLERANCE_MS` | — | `600000` | Planned (T15). How far in the future `recordedAt` may be |
-| `LOG_LEVEL` | — | — | |
+| `SMTP_USER` / `SMTP_PASS` | — | — | Optional. Needed for a real provider |
+| `SMTP_SECURE` | — | `false` | `true` for implicit TLS (usually port 465) |
+| `PASSWORD_RESET_EXPIRATION` | — | `15` | Minutes; only used when email is enabled |
+| `READING_FUTURE_TOLERANCE_MS` | — | `600000` | Validated since T2; used from T15. How far in the future `recordedAt` may be |
+| `LOG_LEVEL` | — | `info` | `fatal`, `error`, `warn`, `info`, `debug` or `trace` |
 | `SEED_SUPER_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | — | — | Planned (T9). Read only by `prisma/seed.ts` |
 
 Run migrations:

@@ -8,7 +8,6 @@ Not implemented: everything marked **planned** below — organizations, per-orga
 
 Known bugs today:
 
-* `TOKEN_EXPIRATION` Zod default is `'3600'`, which `jsonwebtoken` reads as 3600 **milliseconds** (≈3.6 s). Hidden only because the dev `.env` sets `7d` (T2).
 * `DELETE /user/:id` fails with a foreign-key error (500) for any user who has a refresh token or password-reset token (T5).
 * `/auth/login` has no stricter rate limit; README used to claim one (T3).
 * The refresh token lifetime is sliding, not fixed (each rotation gets a fresh 14 days).
@@ -22,7 +21,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | # | Task | Status | Depends on |
 |---|---|---|---|
 | T1 | Rewrite the six docs for the hatchery design | in progress (this commit) | |
-| T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; remove `THROTTLE_TTL`/`THROTTLE_LIMIT` (limits are per-route constants, see Rate limits); `.env.example` and the README table match the Zod schema | not started | |
+| T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; remove `THROTTLE_TTL`/`THROTTLE_LIMIT` (limits are per-route constants, see Rate limits); `.env.example` and the README table match the Zod schema | done | |
 | T3 | Rate limits per the "Rate limits" table (user-id tracker from the verified JWT `sub`, IP fallback; the global throttler runs before controller guards, so the tracker cannot rely on `req.user`); 429 carries `Retry-After`, exposed through CORS | not started | |
 | T4 | Rename controller `/user` → `/users` (and `/user/me` → `/users/me`); update docs and Swagger. Done together with T8 as one breaking release for the frontend (paths, username login, new `/users/me`): until then the old `/user…` paths and email login must keep working | not started | T8 |
 | T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings | not started | |
@@ -193,3 +192,4 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * bull-board `/queues`: put authentication in front before any non-local exposure
 * Dead-letter/failed-job alerting; cleanup job for expired `EmailVerification`; timeout on `EmailService.sendMail()`; Mailpit as a systemd service
 * Repo hygiene: `package.json` name and version, `.env.example` database name (`nestjs_boilerplate_db`)
+* Unit and e2e specs are stale after the refactors (`pnpm test` fails); update or rewrite them before the first release
