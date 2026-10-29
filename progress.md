@@ -162,6 +162,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-10-20: Auth tables cascade on user delete; domain records restrict.
 * 2026-10-26: `/user` → `/users` ships together with username login and the new `/users/me` as one breaking release (T4 + T8). A password change returns a fresh access token and refresh cookie and revokes all older refresh tokens.
 * 2026-10-28: Rate limits are per route; authenticated routes are keyed by user id (field staff share a public IP). Sync: only a bad envelope is a 400; every item problem is a per-item `rejected`; results carry `index`.
+* 2026-10-29: Build order: auth first (T2, T3, T5, T6, T7, T4+T8, T9, T13, T16), then organizations and the domain (T10–T12, T14, T15, T17).
 
 ## Open decisions
 
