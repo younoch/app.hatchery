@@ -113,7 +113,8 @@ See the Backend → Frontend rows in `COORDINATION.md`. This file keeps only the
 |---|---|---|
 | routes with a valid token (default) | user id | 120 |
 | `POST /readings/sync` | user id | 30 |
-| `POST /auth/login` | IP | 10 |
+| `POST /auth/login` | username (lowercased) | 10 |
+| `POST /auth/login` | IP (loose ceiling, floods only) | 120 |
 | `POST /auth/refresh` | IP | 60 |
 | everything else without a token | IP | 100 |
 
@@ -162,7 +163,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-10-26: `/user` → `/users` ships together with username login and the new `/users/me` as one breaking release (T4 + T8). A password change returns a fresh access token and refresh cookie and revokes all older refresh tokens.
 * 2026-10-28: Rate limits are per route; authenticated routes are keyed by user id (field staff share a public IP). Sync: only a bad envelope is a 400; every item problem is a per-item `rejected`; results carry `index`.
 * 2026-10-29: Build order: auth first (T2, T3, T5, T6, T7, T4+T8, T9, T13, T16), then organizations and the domain (T10–T12, T14, T15, T17).
-
+* 2026-10-30: Login throttling for the pilot is by username (10/min) plus a loose per-IP ceiling (120/min), because mobile-network IPs are shared and unstable. Account lockout is deferred until after the pilot presentation.
 ## Open decisions
 
 | # | Decision | Needed by |
@@ -180,7 +181,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * Deployment: one registrable domain with `app.` and `api.` subdomains (cookie `SameSite=lax`); production checklist (HTTPS, backups, secrets)
 * Swagger response schemas (`@ApiProperty`/`@ApiResponse` on response DTOs) so frontend types can be generated from `/api-json` (frontend declined type generation for now: B→F-12)
 * Configurable refresh cookie `Path` (frontend request F→B-06); today it is hard-coded to `/auth/refresh` in `auth.constants.ts`
-* Login throttle per username in addition to per IP
+* Brute-force protection beyond rate limits (decided 2026-10-30: after the pilot presentation): per-account lockout (counter with a time window, `account_locked` code, admin reset unlocks, super admin exempt), optional `deviceId` for audit logs only (never a security barrier; MAC addresses are not readable from a browser)
 * Fix or remove `POST /auth/logout` (the cookie Path means browsers never send the cookie)
 * `PATCH /users/me` (edit own name)
 * Database-level one-admin-per-organization guard (e.g. `Organization.adminId @unique`) if the service rule proves fragile
@@ -193,3 +194,4 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * Dead-letter/failed-job alerting; cleanup job for expired `EmailVerification`; timeout on `EmailService.sendMail()`; Mailpit as a systemd service
 * Repo hygiene: `package.json` name and version, `.env.example` database name (`nestjs_boilerplate_db`)
 * Unit and e2e specs are stale after the refactors (`pnpm test` fails); update or rewrite them before the first release
+* Brute-force protection beyond rate limits (decided 2026-10-30: after the pilot presentation): per-account lockout (counter with a time window, `account_locked` code, admin reset unlocks, super admin exempt), optional `deviceId` for audit logs only (never a security barrier; MAC addresses are not readable from a browser)
