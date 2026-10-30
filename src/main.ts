@@ -24,6 +24,7 @@ async function bootstrap() {
   app.enableCors({
     origin: configService.get<string[]>('corsOrigins') ?? [],
     credentials: true,
+    exposedHeaders: ['Retry-After'],
   });
 
   // ✅ Global setup first

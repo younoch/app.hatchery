@@ -9,7 +9,6 @@ Not implemented: everything marked **planned** below — organizations, per-orga
 Known bugs today:
 
 * `DELETE /user/:id` fails with a foreign-key error (500) for any user who has a refresh token or password-reset token (T5).
-* `/auth/login` has no stricter rate limit; README used to claim one (T3).
 * The refresh token lifetime is sliding, not fixed (each rotation gets a fresh 14 days).
 
 Frontend (`hatchery-frontend`): Step 21 (offline sync) waits on the Readings contract below and builds a mock adapter from it.
@@ -22,7 +21,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 |---|---|---|---|
 | T1 | Rewrite the six docs for the hatchery design | in progress (this commit) | |
 | T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; remove `THROTTLE_TTL`/`THROTTLE_LIMIT` (limits are per-route constants, see Rate limits); `.env.example` and the README table match the Zod schema | done | |
-| T3 | Rate limits per the "Rate limits" table (user-id tracker from the verified JWT `sub`, IP fallback; the global throttler runs before controller guards, so the tracker cannot rely on `req.user`); 429 carries `Retry-After`, exposed through CORS | not started | |
+| T3 | Rate limits per the "Rate limits" table (user-id tracker from the verified JWT `sub`, IP fallback; the global throttler runs before controller guards, so the tracker cannot rely on `req.user`); 429 carries `Retry-After`, exposed through CORS | Done | |
 | T4 | Rename controller `/user` → `/users` (and `/user/me` → `/users/me`); update docs and Swagger. Done together with T8 as one breaking release for the frontend (paths, username login, new `/users/me`): until then the old `/user…` paths and email login must keep working | not started | T8 |
 | T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings | not started | |
 | T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants; validation errors carry the top-level code `validation_failed`; oversized bodies answer 413 `payload_too_large` | not started | |

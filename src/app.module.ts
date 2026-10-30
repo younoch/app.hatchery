@@ -4,7 +4,9 @@ import { LoggerModule, Params } from 'nestjs-pino';
 import { IncomingMessage, ServerResponse } from 'http';
 import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AppThrottlerGuard } from './common/throttler/app-throttler.guard';
+import { createThrottlerOptions } from './common/throttler/throttler.config';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
@@ -24,12 +26,11 @@ import { ExpressAdapter } from '@bull-board/express';
       load: [appConfig],
       validate: validateEnv,
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000, // 60 সেকেন্ড (milliseconds-এ)
-        limit: 100, // এই সময়ে সর্বোচ্চ 100টা request per IP
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        createThrottlerOptions(configService.getOrThrow<string>('JWT_SECRET')),
+    }),
 
     LoggerModule.forRootAsync({
       inject: [ConfigService],
@@ -90,7 +91,7 @@ import { ExpressAdapter } from '@bull-board/express';
     },
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: AppThrottlerGuard,
     },
   ],
 })

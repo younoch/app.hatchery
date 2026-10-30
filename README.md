@@ -47,7 +47,7 @@ PostgreSQL, Redis and Mailpit run as native local services on Fedora; no Docker 
 * **Global exception handling** — `HttpExceptionFilter` maps Prisma errors to HTTP codes and logs with pino.
 * **Consistent response shape** — `ResponseInterceptor` wraps every response as `{ success, statusCode, data, timestamp }`.
 * **Generic pagination** — `PaginationQueryDto` / `PaginatedResult` / `paginate()`.
-* **Rate limiting** — today a global throttle of 100 requests per 60 s per IP is hard-coded in `app.module.ts`. Per-route limits, keyed by user id on authenticated routes, are planned (T3): see `progress.md` → Rate limits.
+* **Rate limiting** — `@nestjs/throttler` with named limits (`src/common/throttler/`): per user id on authenticated routes, per IP on tokenless routes, per username plus a loose per-IP ceiling on `/auth/login`. Values: `progress.md` → Rate limits.
 * **Multi-tenant by organization** — see `AGENTS.md` → Tenant isolation.
 
 ## Features
