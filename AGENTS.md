@@ -203,8 +203,7 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 * `code` is a stable machine code (snake_case) and is what the frontend maps to i18n text. `message` is English developer text and is never shown to users.
 * A validation error has `code: validation_failed` at the top and the details in `errors[]`.
 * Field problems come as `errors: [{ field, code, params }]`. The code list is in `progress.md` → Error codes.
-* Today (current): Nest's default validation shape (`message` as an array of strings) and no `code`. Planned in T6.
-* `HttpExceptionFilter` maps Prisma errors: `P2025` → 404, `P2002` → 409, `P2003` → 409 (planned).
+* `HttpExceptionFilter` maps Prisma errors: `P2025` → 404, `P2002` → 409, `P2003` → 409. Services throw `AppException(status, code, message)` when the frontend needs a specific code; plain Nest exceptions get a default code from the status (`src/common/errors/`).
 
 ## Readings sync invariants
 

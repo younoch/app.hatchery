@@ -165,6 +165,7 @@ Global roles `admin`, `manager`, `staff` with the default templates from `AGENTS
 | 20260926171308_add_password_reset_token | PasswordResetToken |
 | 20260927120000_remove_tax_task | Dropped TaxTask and TaskStatus |
 | 20260927183537_add_refresh_token | RefreshToken |
+| 20261030195922_cascade_auth_tables | onDelete Cascade on EmailVerification, PasswordResetToken, RefreshToken |
 
 Add a row here after each migration is run (the folder name carries a timestamp).
 

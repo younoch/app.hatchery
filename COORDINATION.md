@@ -43,6 +43,7 @@ It records what each side asks of the other (requests and demands), what it reco
 | B→F-19 | 2026-10-26 | Request | Treat 429 on `POST /readings/sync` as transient: keep the items pending and retry after the `Retry-After` header; never mark items `failed` because of it | accepted | T3, T15. Step 21: 429 waits for `Retry-After` (falls back to backoff if the header is missing); login 429 shows a toast |
 | B→F-20 | 2026-10-26 | Notice | Backend delivers T4 (`/users` paths) and T8 (username login, new `/users/me`) as one release; until then `/user…` paths and email login keep working | done | Acknowledged. The frontend switches in one step at delivery |
 | B→F-21 | 2026-10-29 | Request | Match `POST /readings/sync` results to items by `index` (always present), not by `id`; `id` is echoed only when the item had a string `id`. A bad item never causes HTTP 400, only a bad envelope does | accepted | T15. Step 21 maps results by `index`; a whole-request 400 is treated as a frontend bug (chunk stays pending, reported to errorStore) |
+| B→F-22 | 2026-10-31 | Notice | Every error now carries `code`; validation errors are `code: validation_failed` with `errors[]` of `{ field, code, params }`; `message` is always a string (it was an array or a nested object before); 413 is `payload_too_large`. Map `code`, never `message` | open | T6; codes in backend `progress.md` |
 
 ## Frontend → Backend
 
