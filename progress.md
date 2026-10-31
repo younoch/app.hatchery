@@ -8,7 +8,6 @@ Not implemented: everything marked **planned** below — organizations, per-orga
 
 Known bugs today:
 
-* `DELETE /user/:id` fails with a foreign-key error (500) for any user who has a refresh token or password-reset token (T5).
 * The refresh token lifetime is sliding, not fixed (each rotation gets a fresh 14 days).
 
 Frontend (`hatchery-frontend`): Step 21 (offline sync) waits on the Readings contract below and builds a mock adapter from it.
@@ -23,8 +22,8 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T2 | Env/config: `TOKEN_EXPIRATION` default `1h` + format check (`/^\d+[smhd]$/`); add `PASSWORD_RESET_EXPIRATION`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_ENABLED`, `READING_FUTURE_TOLERANCE_MS` to Zod; remove `THROTTLE_TTL`/`THROTTLE_LIMIT` (limits are per-route constants, see Rate limits); `.env.example` and the README table match the Zod schema | done | |
 | T3 | Rate limits per the "Rate limits" table (user-id tracker from the verified JWT `sub`, IP fallback; the global throttler runs before controller guards, so the tracker cannot rely on `req.user`); 429 carries `Retry-After`, exposed through CORS | Done | |
 | T4 | Rename controller `/user` → `/users` (and `/user/me` → `/users/me`); update docs and Swagger. Done together with T8 as one breaking release for the frontend (paths, username login, new `/users/me`): until then the old `/user…` paths and email login must keep working | not started | T8 |
-| T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings (self-block now; org admin with T10, readings with T15) | in progress | |
-| T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants; validation errors carry the top-level code `validation_failed`; oversized bodies answer 413 `payload_too_large` | not started | |
+| T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings (self-block now; org admin with T10, readings with T15) | done | |
+| T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants; validation errors carry the top-level code `validation_failed`; oversized bodies answer 413 `payload_too_large` | in progress | |
 | T7 | Permission map refactor (per-resource actions, platform vs org scope); resolver stays on `Role.permissions` until T10 | not started | |
 | T8 | (released together with T4) User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | not started | T6, T7 |
 | T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | not started | T7, T8 |
@@ -143,6 +142,8 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | `rate_limited` | 429 | throttled; the response has a `Retry-After` header (seconds), exposed through CORS |
 | `validation_failed` | 400 | top-level code of a validation error; the details are in `errors[]` |
 | `payload_too_large` | 413 | request body over 100 KB |
+| `bad_request` | 400 | generic bad request without a specific code (default for plain 400) |
+| `internal_error` | 500 | unexpected server error |
 
 ## Decisions log
 

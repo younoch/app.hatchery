@@ -2,10 +2,13 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  HttpStatus
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
+import { AppException } from '@/common/errors/app.exception';
+import { ErrorCode } from '@/common/errors/error-codes';
 import { UserService } from '../user/user.service';
 import { User } from '@prisma/client';
 import { SafeUser } from '../user/types/safe-user.type';
@@ -41,7 +44,11 @@ export class AuthService {
     const user = await this.validateUser(email, password);
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        ErrorCode.INVALID_CREDENTIALS,
+        'Invalid credentials',
+      );
     }
 
     const payload = { email: user.email, sub: user.id };

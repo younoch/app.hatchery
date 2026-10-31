@@ -3,7 +3,6 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
-  ConflictException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UserRepository } from '../../common/repositories/user.repository';
@@ -13,6 +12,9 @@ import { VerificationStatus } from '@prisma/client';
 import { RoleRepository } from '../role/repository/role.repository';
 import { paginate } from '@/common/helpers/paginate.helper';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
+import { AppException } from '@/common/errors/app.exception';
+import { ErrorCode } from '@/common/errors/error-codes';
+import { HttpStatus } from '@nestjs/common';
 @Injectable()
 export class UserService {
   constructor(
@@ -110,7 +112,11 @@ export class UserService {
 
   async deleteUser(userId: string, currentUserId: string) {
     if (userId === currentUserId) {
-      throw new ConflictException('You cannot delete your own account');
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.CANNOT_TARGET_SELF,
+        'You cannot delete your own account',
+      );
     }
     return this.userRepository.deleteUser(userId);
   }

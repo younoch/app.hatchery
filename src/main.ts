@@ -5,10 +5,10 @@ import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import { validationExceptionFactory } from './common/errors/validation-exception.factory';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -33,6 +33,7 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      exceptionFactory: validationExceptionFactory,
     }),
   );
   app.useGlobalInterceptors(new ResponseInterceptor());

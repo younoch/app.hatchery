@@ -1,12 +1,14 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
+  HttpStatus,
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSION_KEY } from '../decorators/require-permission.decorator';
 import { UserPermissionResolver } from '@/common/permissions/user-permission.resolver';
+import { ErrorCode } from '../errors/error-codes';
+import { AppException } from '../errors/app.exception';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -26,14 +28,24 @@ export class PermissionsGuard implements CanActivate {
       .switchToHttp()
       .getRequest<{ user?: { userId?: string } }>();
     const userId = request.user?.userId;
-    if (!userId) throw new ForbiddenException('Unauthenticated');
+    if (!userId) {
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        ErrorCode.UNAUTHORIZED,
+        'Unauthenticated',
+      );
+    }
 
     const allowed = await this.permissionResolver.hasPermission(
       userId,
       required,
     );
     if (!allowed) {
-      throw new ForbiddenException(`Missing permission: ${required}`);
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        ErrorCode.PERMISSION_DENIED,
+        'Missing permission',
+      );
     }
 
     return true;
