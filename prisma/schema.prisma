@@ -32,7 +32,7 @@ model Role {
 model EmailVerification {
   id        String              @id @default(uuid())
   userId    String              @unique
-  user      User                @relation(fields: [userId], references: [id])
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String              @unique
   status    VerificationStatus  @default(PENDING)
   expiresAt DateTime
@@ -42,7 +42,7 @@ model EmailVerification {
 model PasswordResetToken {
   id        String    @id @default(uuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String    @unique
   used      Boolean   @default(false)
   expiresAt DateTime
@@ -52,7 +52,7 @@ model PasswordResetToken {
 model RefreshToken {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique   // hashed, plaintext না রাখা ভালো
   revoked   Boolean  @default(false)
   expiresAt DateTime

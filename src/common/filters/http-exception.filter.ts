@@ -28,6 +28,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       } else if (exception.code === 'P2002') {
         status = HttpStatus.CONFLICT;
         message = 'A record with this value already exists';
+      } else if (exception.code === 'P2003') {
+        status = HttpStatus.CONFLICT;
+        message = 'This record is referenced by other records';
       } else {
         this.logger.error(
           {

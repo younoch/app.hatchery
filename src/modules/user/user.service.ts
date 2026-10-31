@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UserRepository } from '../../common/repositories/user.repository';
@@ -109,7 +110,7 @@ export class UserService {
 
   async deleteUser(userId: string, currentUserId: string) {
     if (userId === currentUserId) {
-      throw new ForbiddenException('You cannot delete your own account');
+      throw new ConflictException('You cannot delete your own account');
     }
     return this.userRepository.deleteUser(userId);
   }
