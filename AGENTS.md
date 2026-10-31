@@ -96,7 +96,7 @@ Naming: `{feature}.controller.ts`, `{feature}.service.ts`, `{entity}.repository.
 
 ## RBAC
 
-* Permission key: `resource:action`. Keys come from a per-resource action map in `permission.constants.ts` (not RESOURCES × ACTIONS: `read-all` makes no sense on every resource). The same file is the whitelist for DTO validation and says which keys are platform-level. (Planned, T7; today it is RESOURCES × ACTIONS for `user` and `role`.)
+* Permission key: `resource:action`. Keys come from a per-resource action map in `permission.constants.ts` (not RESOURCES × ACTIONS: `read-all` makes no sense on every resource). The same file is the whitelist for DTO validation and says which keys are platform-level. (Done in T7. `Role.permissions` templates accept org-level keys only; `RequirePermission` is typed to the map.)
 * Two scopes. **Platform** keys are never stored in an `OrganizationRole`; they work only through the super-admin bypass. **Org** keys can be granted to roles by the org admin.
 
 | resource | actions | scope |

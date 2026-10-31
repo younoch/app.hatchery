@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UserRepository } from '@/common/repositories/user.repository';
+import { PERMISSIONS } from '@/common/permissions/permission.constants';
 
 @Injectable()
 export class UserPermissionResolver {
@@ -11,7 +12,9 @@ export class UserPermissionResolver {
 
   async getPermissions(userId: string): Promise<string[]> {
     const user = await this.getUserWithRole(userId);
-    return user?.role?.permissions ?? [];
+    if (!user) return [];
+    if (user.isSuperAdmin) return [...PERMISSIONS];
+    return user.role?.permissions ?? [];
   }
 
   async hasPermission(userId: string, permission: string): Promise<boolean> {

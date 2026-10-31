@@ -7,8 +7,8 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  PERMISSIONS,
-  Permission,
+  ORG_PERMISSIONS,
+  OrgPermission,
 } from '@/common/permissions/permission.constants';
 
 export class CreateRoleDto {
@@ -17,10 +17,10 @@ export class CreateRoleDto {
   @MinLength(2)
   name: string;
 
-  @ApiProperty({ example: PERMISSIONS.slice(0, 2) })
+  @ApiProperty({ example: ORG_PERMISSIONS.slice(0, 2) })
   @IsArray()
-  @IsIn(PERMISSIONS, { each: true })
-  permissions: Permission[];
+  @IsIn(ORG_PERMISSIONS, { each: true })
+  permissions: OrgPermission[]
 }
 
 export class UpdateRoleDto {
@@ -30,9 +30,9 @@ export class UpdateRoleDto {
   @MinLength(2)
   name?: string;
 
-  @ApiPropertyOptional({ example: PERMISSIONS.slice(0, 2) })
+  @ApiPropertyOptional({ example: ORG_PERMISSIONS.slice(0, 2) })
   @IsOptional()
   @IsArray()
-  @IsIn(PERMISSIONS, { each: true })
-  permissions?: Permission[];
+  @IsIn(ORG_PERMISSIONS, { each: true })
+  permissions?: OrgPermission[];
 }

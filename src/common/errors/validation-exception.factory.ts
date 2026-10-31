@@ -45,6 +45,12 @@ function toFieldError(
     case 'isArray':
     case 'isEnum':
       return { field, code: ErrorCode.INVALID_TYPE };
+    case 'isIn':
+      return { field, code: ErrorCode.NOT_ALLOWED };
+    case 'matches':
+      return message.includes('one letter and one number')
+        ? { field, code: ErrorCode.WEAK_PASSWORD }
+        : { field, code: ErrorCode.INVALID_FORMAT };
     default:
       // isEmail, matches, custom decorators, ...
       return { field, code: ErrorCode.INVALID_FORMAT };
