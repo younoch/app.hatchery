@@ -20,7 +20,7 @@ export class CreateRoleDto {
   @ApiProperty({ example: ORG_PERMISSIONS.slice(0, 2) })
   @IsArray()
   @IsIn(ORG_PERMISSIONS, { each: true })
-  permissions: OrgPermission[]
+  permissions: OrgPermission[];
 }
 
 export class UpdateRoleDto {

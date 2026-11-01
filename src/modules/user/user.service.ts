@@ -5,6 +5,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { HttpStatus } from '@nestjs/common';
+
 import { UserRepository } from '../../common/repositories/user.repository';
 import { EmailVerificationRepository } from './repository/email-verification.repository';
 import { PrismaService } from '@/common/prisma/prisma.service';
@@ -14,7 +16,7 @@ import { paginate } from '@/common/helpers/paginate.helper';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { AppException } from '@/common/errors/app.exception';
 import { ErrorCode } from '@/common/errors/error-codes';
-import { HttpStatus } from '@nestjs/common';
+import { UserPermissionResolver } from '@/common/permissions/user-permission.resolver';
 @Injectable()
 export class UserService {
   constructor(
@@ -22,6 +24,7 @@ export class UserService {
     private readonly emailVerificationRepository: EmailVerificationRepository,
     private readonly roleRepository: RoleRepository,
     private readonly prisma: PrismaService,
+    private readonly permissionResolver: UserPermissionResolver,
   ) {}
 
   findByEmail(email: string) {
@@ -32,17 +35,30 @@ export class UserService {
     return this.userRepository.findByEmailForAuth(email);
   }
 
-  createUser(email: string, hashedPassword: string) {
-    return this.userRepository.create(email, hashedPassword);
+  findByUsernameForAuth(username: string) {
+    return this.userRepository.findByUsernameForAuth(username);
+  }
+
+  createUser(email: string, username: string, hashedPassword: string) {
+    return this.userRepository.create(email, username, hashedPassword);
+  }
+  findById(id: string) {
+    return this.userRepository.findById(id);
   }
   async createUserWithVerification(
     email: string,
+    username: string,
     hashedPassword: string,
     token: string,
     expiresAt: Date,
   ) {
     return this.prisma.$transaction(async (tx) => {
-      const user = await this.userRepository.create(email, hashedPassword, tx);
+      const user = await this.userRepository.create(
+        email,
+        username,
+        hashedPassword,
+        tx,
+      );
       await this.emailVerificationRepository.create(
         user.id,
         token,
@@ -100,13 +116,18 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    const permissions = await this.permissionResolver.getPermissions(userId);
 
     return {
       id: user.id,
       email: user.email,
-      role: user.role
-        ? { name: user.role.name, permissions: user.role.permissions }
-        : null,
+      username: user.username,
+      name: user.name,
+      isSuperAdmin: user.isSuperAdmin,
+      organizationId: null, // TODO(T10): real organizationId
+      permissions,
+      mustChangePassword: user.mustChangePassword,
+      role: user.role ? { name: user.role.name } : null,
     };
   }
 

@@ -21,6 +21,19 @@ export class UserRepository {
     });
   }
 
+  findByUsernameForAuth(username: string) {
+    return this.prisma.user.findUnique({
+      where: { username },
+    });
+  }
+
+  findById(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      omit: { password: true },
+    });
+  }
+
   findByIdForAuth(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
@@ -41,10 +54,15 @@ export class UserRepository {
     return this.prisma.user.count();
   }
 
-  create(email: string, hashedPassword: string, tx?: Prisma.TransactionClient) {
+  create(
+    email: string,
+    username: string,
+    hashedPassword: string,
+    tx?: Prisma.TransactionClient,
+  ) {
     const client = tx ?? this.prisma;
     return client.user.create({
-      data: { email, password: hashedPassword },
+      data: { email, username, password: hashedPassword },
       omit: { password: true },
     });
   }
@@ -59,7 +77,7 @@ export class UserRepository {
   updatePassword(userId: string, hashedPassword: string) {
     return this.prisma.user.update({
       where: { id: userId },
-      data: { password: hashedPassword },
+      data: { password: hashedPassword, mustChangePassword: false },
       omit: { password: true },
     });
   }

@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 
 interface RegisterJobData {
   email: string;
+  username: string;
   hashedPassword: string;
 }
 
@@ -44,7 +45,7 @@ export class EmailVerificationProcessor extends WorkerHost {
   }
 
   private async handleRegisterUser(data: RegisterJobData): Promise<void> {
-    const { email, hashedPassword } = data;
+    const { email, username, hashedPassword } = data;
     this.logger.log(`[worker] received registration job for: ${email}`);
 
     try {
@@ -58,6 +59,7 @@ export class EmailVerificationProcessor extends WorkerHost {
 
         user = await this.userService.createUserWithVerification(
           email,
+          username,
           hashedPassword,
           token,
           expiresAt,

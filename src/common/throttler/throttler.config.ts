@@ -52,8 +52,7 @@ export function createThrottlerOptions(
 
   const getLoginName = (req: Request): string => {
     const body = (req.body ?? {}) as Record<string, unknown>;
-    // TODO(T8): remove the email fallback when login takes only `username`.
-    const raw = body.username ?? body.email;
+    const raw = body.username;
     if (typeof raw !== 'string' || !raw.trim()) return ip(req);
     return raw.trim().toLowerCase().slice(0, MAX_NAME_LENGTH);
   };

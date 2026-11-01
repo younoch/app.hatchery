@@ -48,9 +48,13 @@ function toFieldError(
     case 'isIn':
       return { field, code: ErrorCode.NOT_ALLOWED };
     case 'matches':
-      return message.includes('one letter and one number')
-        ? { field, code: ErrorCode.WEAK_PASSWORD }
-        : { field, code: ErrorCode.INVALID_FORMAT };
+      if (message.includes('one letter and one number')) {
+        return { field, code: ErrorCode.WEAK_PASSWORD };
+      }
+      if (field === 'username') {
+        return { field, code: ErrorCode.INVALID_USERNAME };
+      }
+      return { field, code: ErrorCode.INVALID_FORMAT };
     default:
       // isEmail, matches, custom decorators, ...
       return { field, code: ErrorCode.INVALID_FORMAT };

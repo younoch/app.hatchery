@@ -59,7 +59,7 @@ describe('AuthController', () => {
     const response = { cookie: setCookie } as unknown as Response;
 
     const result = await controller.login(
-      { email: 'user@example.com', password: 'password' },
+      { username: 'user', password: 'password' },
       response,
     );
 

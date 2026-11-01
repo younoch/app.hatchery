@@ -28,13 +28,17 @@ export class AuthController {
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto.email, dto.password);
+    return this.authService.register(dto.email, dto.username, dto.password);
   }
 
   @Post('register-async')
   @HttpCode(HttpStatus.ACCEPTED)
   registerAsync(@Body() dto: RegisterDto) {
-    return this.authService.registerAsync(dto.email, dto.password);
+    return this.authService.registerAsync(
+      dto.email,
+      dto.username,
+      dto.password,
+    );
   }
 
   @Post('login')
@@ -42,7 +46,7 @@ export class AuthController {
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const tokens = await this.authService.login(dto.email, dto.password);
+    const tokens = await this.authService.login(dto.username, dto.password);
     response.cookie(
       REFRESH_COOKIE_NAME,
       tokens.refresh_token,

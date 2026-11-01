@@ -18,12 +18,14 @@ import { UserService } from './user.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
+import { AllowMustChangePassword } from '@/common/decorators/allow-must-change-password.decorator';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
-@Controller('user')
+@Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
+  @AllowMustChangePassword()
   @Get('me')
   getProfile(@CurrentUser() user: JwtUser) {
     return this.userService.getMe(user.userId);
@@ -61,6 +63,7 @@ export class UserController {
     );
   }
 
+  @AllowMustChangePassword()
   @Patch('me/password')
   async updatePassword(
     @Body() dto: UpdatePasswordDto,

@@ -12,13 +12,13 @@
 | field | type | required | default | notes |
 |---|---|---|---|---|
 | id | String | yes | uuid() | Primary key |
-| username | String | yes | - | PLANNED (T8). Unique, stored lowercase, 3–30 chars `a-z 0-9 . _ -`. Login key |
+| username | String | yes | - | Unique, stored lowercase, 3–30 chars `a-z 0-9 . _ -`. Login key |
 | email | String | yes | - | Unique. Mandatory; not a login key |
-| name | String | no | - | PLANNED (T8). Optional display name |
+| name | String | no | - | Optional display name |
 | password | String | yes | - | bcrypt hash |
 | emailVerified | Boolean | yes | false | Informational while email is disabled |
-| isActive | Boolean | yes | true | PLANNED (T8). false blocks login and refresh |
-| mustChangePassword | Boolean | yes | false | PLANNED (T8) |
+| isActive | Boolean | yes | true | false blocks login and refresh |
+| mustChangePassword | Boolean | yes | false ||
 | isSuperAdmin | Boolean | yes | false | DB-only, not settable via API |
 | organizationId | String | no | - | PLANNED (T10). FK to Organization. Null only for the super admin (and legacy signup users) |
 | roleId | String | no | - | FK to Role (global). Null for the super admin |

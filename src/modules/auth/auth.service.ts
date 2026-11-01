@@ -2,7 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
-  HttpStatus
+  HttpStatus,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
@@ -30,8 +30,8 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
-  async validateUser(email: string, password: string): Promise<User | null> {
-    const user = await this.userService.findByEmailForAuth(email); // ⚠️ পরিবর্তন
+  async validateUser(username: string, password: string): Promise<User | null> {
+    const user = await this.userService.findByUsernameForAuth(username);
     if (!user) return null;
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -40,14 +40,22 @@ export class AuthService {
     return user;
   }
 
-  async login(email: string, password: string) {
-    const user = await this.validateUser(email, password);
+  async login(username: string, password: string) {
+    const user = await this.validateUser(username, password);
 
     if (!user) {
       throw new AppException(
         HttpStatus.UNAUTHORIZED,
         ErrorCode.INVALID_CREDENTIALS,
         'Invalid credentials',
+      );
+    }
+    // Checked after the password, so a wrong password never reveals the state.
+    if (!user.isActive) {
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        ErrorCode.USER_INACTIVE,
+        'Account is deactivated',
       );
     }
 
@@ -60,7 +68,11 @@ export class AuthService {
     };
   }
 
-  async register(email: string, password: string): Promise<SafeUser> {
+  async register(
+    email: string,
+    username: string,
+    password: string,
+  ): Promise<SafeUser> {
     const existingUser = await this.userService.findByEmail(email);
 
     if (existingUser) {
@@ -69,10 +81,11 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    return this.userService.createUser(email, hashedPassword);
+    return this.userService.createUser(email, username, hashedPassword);
   }
   async registerAsync(
     email: string,
+    username: string,
     password: string,
   ): Promise<{ message: string }> {
     const existingUser = await this.userService.findByEmail(email);
@@ -114,7 +127,7 @@ export class AuthService {
 
     await this.emailQueue.add(
       'register-user',
-      { email, hashedPassword },
+      { email, username, hashedPassword },
       {
         attempts: 3,
         backoff: {
@@ -208,10 +221,8 @@ export class AuthService {
     // Rotation: পুরনোটা revoke, নতুন pair issue
     await this.refreshTokenRepository.revoke(stored.id);
 
-    let user;
-    try {
-      user = await this.userService.getMe(stored.userId);
-    } catch {
+    const user = await this.userService.findById(stored.userId);
+    if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
