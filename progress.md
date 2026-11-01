@@ -26,7 +26,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants; validation errors carry the top-level code `validation_failed`; oversized bodies answer 413 `payload_too_large` | Done | |
 | T7 | Permission map refactor (per-resource actions, platform vs org scope); resolver stays on `Role.permissions` until T10 | Done | |
 | T8 | (released together with T4) User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | Done | T6, T7 | status 201
-| T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | not started | T7, T8 |
+| T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | Done | T7, T8 |
 | T10 | `Organization`, `OrganizationRole`, `User.organizationId`; `resolveOrganizationId`; `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; resolver switches to `OrganizationRole`; `assignRole` can no longer assign `admin` | not started | T8, T9 |
 | T11 | Admin user management: `POST /users`, `PATCH /users/:id`, `POST /users/:id/reset-password`, `GET /users?organizationId=`; `mustChangePassword` enforcement | not started | T10 |
 | T12 | `GET/PATCH /organization-roles` | not started | T10 |
@@ -195,3 +195,4 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * Repo hygiene: `package.json` name and version, `.env.example` database name (`nestjs_boilerplate_db`)
 * Unit and e2e specs are stale after the refactors (`pnpm test` fails); update or rewrite them before the first release
 * Brute-force protection beyond rate limits (decided 2026-10-30: after the pilot presentation): per-account lockout (counter with a time window, `account_locked` code, admin reset unlocks, super admin exempt), optional `deviceId` for audit logs only (never a security barrier; MAC addresses are not readable from a browser)
+* Move the Prisma seed config from package.json#prisma to prisma.config.ts before upgrading to Prisma 7
