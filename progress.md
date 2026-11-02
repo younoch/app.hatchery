@@ -33,7 +33,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10 |
 | T15 | `Reading` model; `POST /readings/sync` | not started | T6, T14 |
-| T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | not started | T8 (best before T15) |
+| T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | in progress | T8 (best before T15) |
 | T17 | Structured admin-action log lines | not started | T10, T11 |
 
 ## API contract
@@ -126,7 +126,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | `organization_required` | 400 | super admin did not name an organization |
 | `invalid_credentials` | 401 | wrong username or password |
 | `user_inactive` | 401 | account deactivated |
-| `session_revoked` | 401 | another device logged in (T16) |
+| `session_revoked` | 401 | the session ended: another device logged in, a refresh token was reused, or the password changed |
 | `unauthorized` | 401 | missing or invalid token |
 | `must_change_password` | 403 | change the temporary password first |
 | `permission_denied` | 403 | missing permission |

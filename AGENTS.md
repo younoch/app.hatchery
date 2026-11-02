@@ -181,10 +181,13 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 
 * `POST /auth/refresh`, `POST /auth/refresh/logout`. (The cookie Path is `/auth/refresh`, so `POST /auth/logout` never receives the cookie from a browser.)
 * Separate `RefreshToken` model; the token is stored as a SHA-256 hash (not bcrypt: random salting breaks direct lookup by hash, and slowness is unneeded for high-entropy tokens).
-* Rotation: each refresh revokes the used token and issues a new access + refresh pair. Reuse of a revoked token → plain 401.
+* Rotation: each refresh runs in one transaction. The used token is revoked with a conditional update (`revoked = false`); if no row changed, another request already rotated it. The new token keeps the `familyId`, and the old row stores `replacedByTokenId`.
+* Grace window: `REFRESH_GRACE_MS` (default 30000). A revoked token whose successor is younger than the window is accepted once more and gets a fresh child in the same family. This covers a lost response and two tabs refreshing together.
+* Reuse: a revoked token outside the grace window revokes its whole family and answers 401 `session_revoked`. An unknown or expired token answers 401 `unauthorized`.
+* Single session: a successful login revokes every refresh token of the user, so the older device gets `session_revoked` at its next refresh. Its access token stays valid until it expires (the JWT carries only `sub`), which is why the access lifetime must be short (T16b).
+* Password change and reset revoke all refresh tokens (change also issues a fresh pair); deactivation and admin reset do the same in T11. `isActive` is already checked on every request.
 * Lifetime: `REFRESH_TOKEN_TTL_MS` (14 days) counted from each rotation, so it is **sliding**. No absolute maximum age yet (parking lot).
 * Cookie flags: `COOKIE_SECURE`, `COOKIE_SAME_SITE` (`none` requires `COOKIE_SECURE=true`). Production target: frontend and API under one registrable domain (`app.`/`api.` subdomains) so `lax` works.
-* Hardening (planned, T16): transaction around rotation, grace window (a lost refresh response must not log the user out), token family id, reuse revokes the family, `session_revoked` code, single-session takeover, other sessions revoked on password change/reset/deactivation.
 
 ### Public signup
 

@@ -88,6 +88,7 @@ Every variable the code reads is validated at startup in `src/config/env.validat
 | `JWT_SECRET` | yes | — | No fallback; fails fast if missing |
 | `TOKEN_EXPIRATION` | — | `1h` | Access-token lifetime. Must be a number with a unit (`15m`, `1h`, `7d`); a bare number such as `3600` is rejected at startup, because `jsonwebtoken` would read it as milliseconds. Set it explicitly in production |
 | `REFRESH_TOKEN_TTL_MS` | — | `1209600000` | Refresh token lifetime and cookie max-age (14 days), counted from each rotation |
+| `REFRESH_GRACE_MS` | — | `30000` | A just-rotated refresh token is accepted again for this long (lost response, two tabs) |
 | `COOKIE_SECURE` | — | `false` locally, `true` in production | `true` for HTTPS. Must be `true` in production |
 | `COOKIE_SAME_SITE` | — | `lax` | `strict`, `lax` or `none`. `none` needs `COOKIE_SECURE=true`; prefer one registrable domain with `lax` |
 | `FRONTEND_URL` | — | `http://localhost:3000` | Default allowed browser origin. No wildcard |
