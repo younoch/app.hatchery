@@ -188,11 +188,11 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 
 ### Public signup
 
-`POST /auth/register` and `/auth/register-async` exist today. They are being removed (T13): users are created only by the super admin (first admin) and org admins. Do not build on them. The frontend never implements signup.
+There is no public signup. `POST /auth/register` and `/auth/register-async` were removed (T13). Users are created only by the super admin (first admin) and by org admins (`POST /users`). The frontend never implements signup.
 
 ## Email
 
-* `EMAIL_ENABLED=false` is the default (planned, T13): no mail service is paid for in the pilot. The email address is mandatory and unique, shown to admins, but unused for login.
+* `EMAIL_ENABLED=false` is the default : no mail service is paid for in the pilot. The email address is mandatory and unique, shown to admins, but unused for login.
 * When disabled, `forgot-password`, `reset-password` and `verify-email` answer 503 `email_disabled`. Password recovery is the admin-driven reset.
 * The sending code (`EmailService`, BullMQ processor, `EmailVerification`, `PasswordResetToken`) stays dormant. Turning email on later means flipping the flag and setting the SMTP variables (a provider with a free tier, e.g. Brevo, was considered). Verified emails will be required before email-based reset is trusted.
 

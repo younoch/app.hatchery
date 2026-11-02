@@ -84,14 +84,6 @@ pnpm prisma db seed
 
 It creates the global roles `admin`, `manager`, `staff` with their default permissions (`AGENTS.md` → RBAC) and the super admin from the `SEED_SUPER_ADMIN_*` variables.
 
-**Fallback bootstrap (until T9 and T8 land).** Create a role, register a user through the API (app running, step 8), then promote it in the database. Promotion is deliberately not exposed through any API.
-
-```bash
-psql -U postgres -d hatchery_db -c "INSERT INTO \"Role\" (id, name, permissions) VALUES (gen_random_uuid()::text, 'admin', ARRAY['user:read','user:write','user:delete','role:read','role:write','role:create','role:delete']);"
-
-psql -U postgres -d hatchery_db -c "UPDATE \"User\" SET \"isSuperAdmin\" = true, \"roleId\" = (SELECT id FROM \"Role\" WHERE name = 'admin') WHERE email = 'you@example.com';"
-```
-
 ## 8. Run the app
 
 ```bash

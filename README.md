@@ -94,7 +94,7 @@ Every variable the code reads is validated at startup in `src/config/env.validat
 | `CORS_ORIGINS` | — | `FRONTEND_URL` | Comma-separated allowed origins for credentialed CORS. No wildcard |
 | `APP_URL` | — | `http://localhost:4000` | Used to build links in emails |
 | `REDIS_HOST` / `REDIS_PORT` | — | `localhost` / `6379` | |
-| `EMAIL_ENABLED` | — | `false` | Validated since T2; the gating itself lands in T13. When false, forgot/reset/verify answer 503 `email_disabled` |
+| `EMAIL_ENABLED` | — | `false` | When false, forgot/reset/verify answer 503 `email_disabled` |
 | `SMTP_HOST` / `SMTP_PORT` | — | `localhost` / `1025` | Mailpit in dev |
 | `SMTP_USER` / `SMTP_PASS` | — | — | Optional. Needed for a real provider |
 | `SMTP_SECURE` | — | `false` | `true` for implicit TLS (usually port 465) |
