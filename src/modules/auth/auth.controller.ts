@@ -9,15 +9,17 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiCookieAuth } from '@nestjs/swagger';
 import { Request, Response, CookieOptions } from 'express';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto } from './dto/auth.dto';
 import { AuthService } from './auth.service';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { EmailEnabledGuard } from '@/common/guards/email-enabled.guard';
 import { REFRESH_COOKIE_NAME, REFRESH_COOKIE_PATH } from './auth.constants';
 @Controller('auth')
 export class AuthController {
@@ -25,21 +27,6 @@ export class AuthController {
     private authService: AuthService,
     private configService: ConfigService,
   ) {}
-
-  @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto.email, dto.username, dto.password);
-  }
-
-  @Post('register-async')
-  @HttpCode(HttpStatus.ACCEPTED)
-  registerAsync(@Body() dto: RegisterDto) {
-    return this.authService.registerAsync(
-      dto.email,
-      dto.username,
-      dto.password,
-    );
-  }
 
   @Post('login')
   async login(
@@ -54,15 +41,19 @@ export class AuthController {
     );
     return { access_token: tokens.access_token };
   }
+  @UseGuards(EmailEnabledGuard)
   @Get('verify-email')
   verifyEmail(@Query() query: VerifyEmailDto) {
     return this.authService.verifyEmail(query.token);
   }
+
+  @UseGuards(EmailEnabledGuard)
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }
 
+  @UseGuards(EmailEnabledGuard)
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword);

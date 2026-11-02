@@ -11,19 +11,16 @@ import { AppException } from '@/common/errors/app.exception';
 import { ErrorCode } from '@/common/errors/error-codes';
 import { UserService } from '../user/user.service';
 import { User } from '@prisma/client';
-import { SafeUser } from '../user/types/safe-user.type';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
 import { PasswordResetTokenRepository } from '@/common/repositories/password-reset-token.repository';
 import { EmailService } from '@/common/email/email.service';
 import { ConfigService } from '@nestjs/config';
 import { RefreshTokenRepository } from '@/common/repositories/refresh-token.repository';
+
 @Injectable()
 export class AuthService {
   constructor(
     private jwtService: JwtService,
     private userService: UserService,
-    @InjectQueue('email-verification') private emailQueue: Queue,
     private passwordResetTokenRepository: PasswordResetTokenRepository,
     private refreshTokenRepository: RefreshTokenRepository,
     private emailService: EmailService,
@@ -68,80 +65,10 @@ export class AuthService {
     };
   }
 
-  async register(
-    email: string,
-    username: string,
-    password: string,
-  ): Promise<SafeUser> {
-    const existingUser = await this.userService.findByEmail(email);
-
-    if (existingUser) {
-      throw new BadRequestException('Email already exists');
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    return this.userService.createUser(email, username, hashedPassword);
-  }
-  async registerAsync(
-    email: string,
-    username: string,
-    password: string,
-  ): Promise<{ message: string }> {
-    const existingUser = await this.userService.findByEmail(email);
-
-    if (existingUser) {
-      if (existingUser.emailVerified) {
-        throw new BadRequestException('Email already exists');
-      }
-
-      // unverified — resend flow
-      const token = crypto.randomBytes(32).toString('base64url');
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      await this.userService.regenerateVerificationToken(
-        existingUser.id,
-        token,
-        expiresAt,
-      );
-
-      await this.emailQueue.add(
-        'resend-verification',
-        {
-          email,
-          token,
-        },
-        {
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 2000,
-          },
-        },
-      );
-
-      return { message: 'Verification email resent' };
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    await this.emailQueue.add(
-      'register-user',
-      { email, username, hashedPassword },
-      {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
-      },
-    );
-
-    return { message: 'Registration accepted, processing in background' };
-  }
   async verifyEmail(token: string): Promise<{ message: string }> {
     return this.userService.verifyEmail(token);
   }
+
   async forgotPassword(email: string): Promise<{ message: string }> {
     const genericMessage = {
       message: 'If this email exists, a reset link has been sent',
@@ -218,7 +145,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    // Rotation: পুরনোটা revoke, নতুন pair issue
     await this.refreshTokenRepository.revoke(stored.id);
 
     const user = await this.userService.findById(stored.userId);

@@ -2,15 +2,10 @@ import { UnauthorizedException } from '@nestjs/common';
 import { UserService } from '@/modules/user/user.service';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
-import { Queue } from 'bullmq';
 import { PasswordResetTokenRepository } from '@/common/repositories/password-reset-token.repository';
 import { RefreshTokenRepository } from '@/common/repositories/refresh-token.repository';
 import { EmailService } from '@/common/email/email.service';
 import { ConfigService } from '@nestjs/config';
-
-jest.mock('@nestjs/bullmq', () => ({
-  InjectQueue: () => () => undefined,
-}));
 
 describe('AuthService', () => {
   it('should be defined', () => {
@@ -41,7 +36,6 @@ describe('AuthService', () => {
           email: 'user@example.com',
         }),
       } as unknown as UserService,
-      {} as Queue,
       {} as PasswordResetTokenRepository,
       refreshTokenRepository as unknown as RefreshTokenRepository,
       {} as EmailService,
