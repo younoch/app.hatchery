@@ -30,7 +30,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T10 | `Organization`, `OrganizationRole`, `User.organizationId`; `resolveOrganizationId`; `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; resolver switches to `OrganizationRole`; `assignRole` can no longer assign `admin` | not started | T8, T9 |
 | T11 | Admin user management: `POST /users`, `PATCH /users/:id`, `POST /users/:id/reset-password`, `GET /users?organizationId=`; `mustChangePassword` enforcement | not started | T10 |
 | T12 | `GET/PATCH /organization-roles` | not started | T10 |
-| T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | not started | T9 |
+| T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10 |
 | T15 | `Reading` model; `POST /readings/sync` | not started | T6, T14 |
 | T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | not started | T8 (best before T15) |
@@ -46,8 +46,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; hardening planned (T16) |
 | `POST /auth/refresh/logout` | cookie | — | `{ message }`, cookie cleared | implemented |
 | `POST /auth/logout` | cookie | — | `{ message }` | implemented but unusable from a browser (wrong cookie Path); see parking lot |
-| `POST /auth/register`, `/auth/register-async` | none | `{ email, password }` | user / `{ message }` (202) | implemented; being removed (T13) |
-| `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 \email_disabled` when `EMAIL_ENABLED=false`` |
+| `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 `email_disabled` when `EMAIL_ENABLED=false` |
 | `GET /users/me` | Bearer | — | `{ id, email, username, name, isSuperAdmin, organizationId, permissions (always an array, never missing), mustChangePassword, role: { name } \| null }` | implemented (T4, T8). `organizationId` is always `null` until T10 |
 | `PATCH /users/me/password` | Bearer | `{ currentPassword, newPassword }` | `{ message, access_token }` + new `refresh_token` cookie | implemented as `/user/me/password` returning `{ message }` (T4); T11/T16: clears `mustChangePassword`, revokes all older refresh tokens, issues a fresh pair (the cookie Path means the endpoint cannot tell which token is the current one) |
 | `GET /users` | `user:read` | `page, pageSize, organizationId` | `{ items, meta }` (below) | implemented as global list; org-scoped (T11) |
@@ -194,6 +193,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * Dead-letter/failed-job alerting; cleanup job for expired `EmailVerification`; timeout on `EmailService.sendMail()`; Mailpit as a systemd service
 * Repo hygiene: `package.json` name and version, `.env.example` database name (`nestjs_boilerplate_db`)
 * Unit and e2e specs are stale after the refactors (`pnpm test` fails); update or rewrite them before the first release
-* Brute-force protection beyond rate limits (decided 2026-10-30: after the pilot presentation): per-account lockout (counter with a time window, `account_locked` code, admin reset unlocks, super admin exempt), optional `deviceId` for audit logs only (never a security barrier; MAC addresses are not readable from a browser)
 * Move the Prisma seed config from package.json#prisma to prisma.config.ts before upgrading to Prisma 7
-* EmailService has hard-coded from/secure values; make them configurable before enabling email.
+* The username rule (`/^[a-z0-9._-]{3,30}$/`) went away with `RegisterDto`. Re-create it in `CreateUserDto` (T11).
+* `POST /auth/login` answers 201 (NestJS default for `@Post`); should be 200 via `@HttpCode(HttpStatus.OK)`. Do it with T16.
+* Access token lifetime: the local `.env` has `TOKEN_EXPIRATION=7d`. Before the pilot, set 15m to 1h in the real `.env` (T16 depends on a short access token).
