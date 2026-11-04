@@ -124,6 +124,7 @@ Dormant while `EMAIL_ENABLED=false`. onDelete Cascade (PLANNED, T5).
 | createdAt | DateTime | yes | now() | |
 | familyId | String | yes | - | PLANNED (T16). Token family for reuse detection |
 | replacedByTokenId | String | no | - | PLANNED (T16). Self FK for the grace window |
+| graceUsedAt | DateTime | no | - | PLANNED (T16). Set once when the token is accepted again inside the grace window |
 
 ### VerificationStatus (enum)
 PENDING, SENT, VERIFIED, EXPIRED.
