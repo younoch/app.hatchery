@@ -172,7 +172,7 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 * `POST /auth/login` takes `username` + `password` (lowercased and trimmed before lookup). The body returns `access_token`; the refresh token is set only as an httpOnly cookie `refresh_token` (Path `/auth/refresh`).
 * Authenticated routes are rate limited per user id, not per IP (field staff share public IPs); values are in `progress.md` → Rate limits.
 * The JWT carries only `sub` (+ `email`). Permissions are never in the token.
-* Access token lifetime: `TOKEN_EXPIRATION`, default `1h`.
+* Access token lifetime: \TOKEN_EXPIRATION`, default `1h`; the pilot uses `15m`, because a short access token bounds how long an older device keeps working after a takeover.`
 * Password policy: at least one letter and one number.
 * Rate limits (planned, T3): routes with a valid token are limited per user id (default 120/min; `POST /readings/sync` 30/min); `/auth/login` 10/min per username (lowercased) plus a loose ceiling of 120/min per IP; `/auth/refresh` 60/min per IP; other tokenless routes 100/min per IP. Authenticated traffic is never limited by IP, because field staff share public IPs (hatchery Wi-Fi, mobile-network CGNAT). The login ceiling per IP is loose for the same reason: it only stops floods, it never identifies a person. Values: `progress.md` → Rate limits.
 * A 429 returns `code: rate_limited` and a `Retry-After` header that CORS exposes to the browser.

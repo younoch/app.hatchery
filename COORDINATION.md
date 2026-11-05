@@ -45,6 +45,7 @@ It records what each side asks of the other (requests and demands), what it reco
 | B→F-21 | 2026-10-29 | Request | Match `POST /readings/sync` results to items by `index` (always present), not by `id`; `id` is echoed only when the item had a string `id`. A bad item never causes HTTP 400, only a bad envelope does | accepted | T15. Step 21 maps results by `index`; a whole-request 400 is treated as a frontend bug (chunk stays pending, reported to errorStore) |
 | B→F-22 | 2026-10-31 | Notice | Every error now carries `code`; validation errors are `code: validation_failed` with `errors[]` of `{ field, code, params }`; `message` is always a string (it was an array or a nested object before); 413 is `payload_too_large`. Map `code`, never `message` | open | T6; codes in backend `progress.md` |
 | B→F-23 | 2026-11-02 | Notice | T4 and T8 are released together: `/users…` paths, login by `username`, the new `GET /users/me` shape, 401 `user_inactive`, 403 `must_change_password` (only `GET /users/me` and `PATCH /users/me/password` work until the password is changed). The old `/user…` paths and email login are gone. Switch in one step | open | T4, T8; contract in backend `progress.md`. Until T11/T16, `PATCH /users/me/password` returns `{ message }` only (B→F-18 applies later); the old access token keeps working because the user is loaded on every request. `organizationId` is always `null` until T10 |
+| B→F-24 | 2026-11-05 | Notice | T16 is released: `POST /auth/login` and `POST /auth/refresh` answer 200 (were 201); `PATCH /users/me/password` returns `{ message, access_token }` and sets a new refresh cookie (replace the stored access token); a new login ends every older session; a refresh on an ended session answers 401 `session_revoked` (takeover, token reuse, password change); a lost refresh response can be retried once within 30 s; the access token lives 15 minutes in the pilot | open | T16; B→F-18 applies now. Treat `session_revoked` as: log out and show the login screen |
 
 ## Frontend → Backend
 
@@ -53,10 +54,10 @@ It records what each side asks of the other (requests and demands), what it reco
 | F→B-01 | 2026-10-17 | Demand | Readings model, idempotent create by client UUID, sync endpoint with per-item results, server-owned `createdById` and `syncedAt`, future-time limit. Blocks Step 21 | accepted | T15; no `isLate`/`needsReview` in the pilot |
 | F→B-02 | 2026-10-17 | Demand | `/user/me` must expose `isSuperAdmin` or the full permission list (the super admin has no role and sees nothing otherwise) | accepted | T8 |
 | F→B-03 | 2026-10-17 | Demand | Refresh: grace window and a transaction, so a lost response does not log the user out | accepted | T16 |
-| F→B-04 | 2026-10-17 | Demand | Single-session takeover and a `session_revoked` code | accepted | T16 |
+| F→B-04 | 2026-10-17 | Demand | Single-session takeover and a `session_revoked` code | done | T16 |
 | F→B-05 | 2026-10-17 | Demand | Machine-readable validation errors `{ field, code, params }` | done | T6 |
 | F→B-06 | 2026-10-17 | Demand | Refresh cookie `Path` configurable; explicit production cookie flags and `TOKEN_EXPIRATION` | accepted | Flags and `TOKEN_EXPIRATION`: T2 and deployment (F-11). Configurable `Path`: parking lot |
-| F→B-07 | 2026-10-17 | Demand | A password change revokes the user's other sessions | accepted | T16 |
+| F→B-07 | 2026-10-17 | Demand | A password change revokes the user's other sessions | done | T16 |
 | F→B-08 | 2026-10-17 | Question | May unverified users log in? | superseded | Login is by username and there is no email gating; see decisions log |
 | F→B-09 | 2026-10-17 | Question | Who sees whose readings; last value per user or per tank | accepted | Last value stays per user and local; organization-wide viewing is online only, later, behind `reading:read-all` |
 | F→B-10 | 2026-10-17 | Notice | The login endpoint showed no 429 after 12 calls; the README claim of a strict limit was wrong | done | Docs corrected; limit added in T3 |

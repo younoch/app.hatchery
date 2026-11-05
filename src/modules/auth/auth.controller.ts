@@ -20,7 +20,8 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { EmailEnabledGuard } from '@/common/guards/email-enabled.guard';
-import { REFRESH_COOKIE_NAME, REFRESH_COOKIE_PATH } from './auth.constants';
+import { REFRESH_COOKIE_NAME } from './auth.constants';
+import { refreshCookieOptions } from './refresh-cookie';
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -29,6 +30,7 @@ export class AuthController {
   ) {}
 
   @Post('login')
+  @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -60,6 +62,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh-cookie')
   async refresh(
     @Req() request: Request,
@@ -111,16 +114,6 @@ export class AuthController {
   }
 
   private refreshCookieOptions(includeMaxAge = true): CookieOptions {
-    return {
-      httpOnly: true,
-      secure: this.configService.get<boolean>('cookieSecure') ?? false,
-      sameSite:
-        this.configService.get<'strict' | 'lax' | 'none'>('cookieSameSite') ??
-        'lax',
-      path: REFRESH_COOKIE_PATH,
-      ...(includeMaxAge
-        ? { maxAge: this.configService.get<number>('refreshTokenTtlMs') }
-        : {}),
-    };
+    return refreshCookieOptions(this.configService, includeMaxAge);
   }
 }

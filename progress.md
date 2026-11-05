@@ -33,7 +33,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10 |
 | T15 | `Reading` model; `POST /readings/sync` | not started | T6, T14 |
-| T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | in progress | T8 (best before T15) |
+| T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | done | T8 (best before T15) |
 | T17 | Structured admin-action log lines | not started | T10, T11 |
 
 ## API contract
@@ -42,14 +42,14 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 
 | endpoint | auth / permission | request | `data` | status |
 |---|---|---|---|---|
-| `POST /auth/login` | none | `{ username, password }` (today `{ email, password }`) | `{ access_token }` + cookie `refresh_token` (httpOnly, Path `/auth/refresh`, 14 days) | implemented; username planned (T8) |
-| `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; rotation hardened (T16a); T16b pending |
+| `POST /auth/login` | none | `{ username, password }` | `{ access_token }` + cookie `refresh_token` (httpOnly, Path `/auth/refresh`, 14 days) | implemented; answers 200` |
+| `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; answers 200; rotation, grace window and single session (T16) |
 | `POST /auth/refresh/logout` | cookie | — | `{ message }`, cookie cleared | implemented |
 | `POST /auth/logout` | cookie | — | `{ message }` | implemented but unusable from a browser (wrong cookie Path); see parking lot |
 | `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 `email_disabled` when `EMAIL_ENABLED=false` |
 | `GET /users/me` | Bearer | — | `{ id, email, username, name, isSuperAdmin, organizationId, permissions (always an array, never missing), mustChangePassword, role: { name } \| null }` | implemented (T4, T8). `organizationId` is always `null` until T10 |
 | `PATCH /users/me/password` | Bearer | `{ currentPassword, newPassword }` | `{ message, access_token }` + new `refresh_token` cookie | implemented as `/user/me/password` returning `{ message }` (T4); T11/T16: clears `mustChangePassword`, revokes all older refresh tokens, issues a fresh pair (the cookie Path means the endpoint cannot tell which token is the current one) |
-| `GET /users` | `user:read` | `page, pageSize, organizationId` | `{ items, meta }` (below) | implemented as global list; org-scoped (T11) |
+| `GET /users` | `user:read` | `page, pageSize, organizationId` | `{ items, meta }` (below) | implemented (T16): clears `mustChangePassword`, revokes all older refresh tokens and issues a fresh pair (the cookie Path means the endpoint cannot tell which token is the current one) |
 | `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | user | planned (T11). `roleId` can never be `admin` |
 | `PATCH /users/:id` | `user:write` | `{ roleId?, isActive?, name? }` | user | planned (T11) |
 | `POST /users/:id/reset-password` | `user:reset-password` | `{ temporaryPassword }` | `{ message }` | planned (T11) |
@@ -163,6 +163,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-10-28: Rate limits are per route; authenticated routes are keyed by user id (field staff share a public IP). Sync: only a bad envelope is a 400; every item problem is a per-item `rejected`; results carry `index`.
 * 2026-10-29: Build order: auth first (T2, T3, T5, T6, T7, T4+T8, T9, T13, T16), then organizations and the domain (T10–T12, T14, T15, T17).
 * 2026-10-30: Login throttling for the pilot is by username (10/min) plus a loose per-IP ceiling (120/min), because mobile-network IPs are shared and unstable. Account lockout is deferred until after the pilot presentation.
+* 2026-11-05: `POST /auth/login` and `/auth/refresh` answer 200, not 201. Access token lifetime is 15m in the pilot (a short token bounds how long an older device works after a takeover). Password change and reset revoke all refresh tokens; the change route lives in `AuthModule` to avoid a circular module dependency.
 ## Open decisions
 
 | # | Decision | Needed by |
@@ -195,5 +196,3 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * Unit and e2e specs are stale after the refactors (`pnpm test` fails); update or rewrite them before the first release
 * Move the Prisma seed config from package.json#prisma to prisma.config.ts before upgrading to Prisma 7
 * The username rule (`/^[a-z0-9._-]{3,30}$/`) went away with `RegisterDto`. Re-create it in `CreateUserDto` (T11).
-* `POST /auth/login` answers 201 (NestJS default for `@Post`); should be 200 via `@HttpCode(HttpStatus.OK)`. Do it with T16.
-* Access token lifetime: the local `.env` has `TOKEN_EXPIRATION=7d`. Before the pilot, set 15m to 1h in the real `.env` (T16 depends on a short access token).

@@ -71,6 +71,37 @@ export class AuthService {
     };
   }
 
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const { user, refreshToken } = await this.prisma.$transaction(
+      async (tx) => {
+        const user = await this.userService.updatePassword(
+          userId,
+          currentPassword,
+          newPassword,
+          tx,
+        );
+        // Every older session ends; the caller gets a fresh pair.
+        await this.refreshTokenRepository.revokeAllForUser(userId, tx);
+        const refreshToken = await this.issueRefreshToken(
+          userId,
+          crypto.randomUUID(),
+          tx,
+        );
+        return { user, refreshToken };
+      },
+    );
+
+    return {
+      message: 'Password updated successfully',
+      access_token: this.jwtService.sign({ email: user.email, sub: user.id }),
+      refresh_token: refreshToken.rawToken,
+    };
+  }
+
   async verifyEmail(token: string): Promise<{ message: string }> {
     return this.userService.verifyEmail(token);
   }
@@ -123,6 +154,7 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.userService.setPassword(resetToken.userId, hashedPassword);
+    await this.refreshTokenRepository.revokeAllForUser(resetToken.userId);
     await this.passwordResetTokenRepository.markUsed(resetToken.id);
 
     return { message: 'Password reset successfully' };

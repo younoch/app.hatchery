@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { HttpStatus } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import { UserRepository } from '../../common/repositories/user.repository';
 import { EmailVerificationRepository } from './repository/email-verification.repository';
@@ -167,6 +168,7 @@ export class UserService {
     userId: string,
     currentPassword: string,
     newPassword: string,
+    tx?: Prisma.TransactionClient,
   ) {
     const user = await this.userRepository.findByIdForAuth(userId);
     if (!user) {
@@ -179,10 +181,14 @@ export class UserService {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    return this.userRepository.updatePassword(userId, hashedPassword);
+    return this.userRepository.updatePassword(userId, hashedPassword, tx);
   }
-  async setPassword(userId: string, hashedPassword: string) {
-    return this.userRepository.updatePassword(userId, hashedPassword);
+  async setPassword(
+    userId: string,
+    hashedPassword: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    return this.userRepository.updatePassword(userId, hashedPassword, tx);
   }
   async listUsers(query: PaginationQueryDto) {
     return paginate(

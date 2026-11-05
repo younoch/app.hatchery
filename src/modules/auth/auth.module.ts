@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { BullModule } from '@nestjs/bullmq';
+
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { AccountController } from './account.controller';
 import { JwtStrategy } from './jwt.strategy/jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from '../user/user.module';
@@ -44,6 +46,6 @@ import { PrismaModule } from '@/common/prisma/prisma.module';
     }),
   ],
   providers: [AuthService, JwtStrategy, EmailVerificationProcessor],
-  controllers: [AuthController],
+  controllers: [AuthController, AccountController],
 })
 export class AuthModule {}

@@ -16,7 +16,6 @@ import { RequirePermission } from '@/common/decorators/require-permission.decora
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { UserService } from './user.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
-import { UpdatePasswordDto } from './dto/update-password.dto';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { AllowMustChangePassword } from '@/common/decorators/allow-must-change-password.decorator';
 
@@ -60,19 +59,6 @@ export class UserController {
       id,
       dto.roleId,
       currentUser.userId,
-    );
-  }
-
-  @AllowMustChangePassword()
-  @Patch('me/password')
-  async updatePassword(
-    @Body() dto: UpdatePasswordDto,
-    @CurrentUser() currentUser: JwtUser,
-  ) {
-    return await this.userService.updatePassword(
-      currentUser.userId,
-      dto.currentPassword,
-      dto.newPassword,
     );
   }
 }

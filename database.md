@@ -111,7 +111,7 @@ Dormant while `EMAIL_ENABLED=false`. onDelete Cascade.
 | expiresAt | DateTime | yes | - | |
 | createdAt | DateTime | yes | now() | |
 
-Dormant while `EMAIL_ENABLED=false`. onDelete Cascade (PLANNED, T5).
+Dormant while `EMAIL_ENABLED=false`. onDelete Cascade.
 
 ### RefreshToken
 | field | type | required | default | notes |

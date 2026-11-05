@@ -74,8 +74,13 @@ export class UserRepository {
     });
   }
 
-  updatePassword(userId: string, hashedPassword: string) {
-    return this.prisma.user.update({
+  updatePassword(
+    userId: string,
+    hashedPassword: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client.user.update({
       where: { id: userId },
       data: { password: hashedPassword, mustChangePassword: false },
       omit: { password: true },
