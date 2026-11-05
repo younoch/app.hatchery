@@ -42,7 +42,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 
 | endpoint | auth / permission | request | `data` | status |
 |---|---|---|---|---|
-| `POST /auth/login` | none | `{ username, password }` | `{ access_token }` + cookie `refresh_token` (httpOnly, Path `/auth/refresh`, 14 days) | implemented; answers 200` |
+| `POST /auth/login` | none | `{ username, password }` | `{ access_token }` + cookie `refresh_token` (httpOnly, Path `/auth/refresh`, 14 days) | implemented; answers 200 |
 | `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; answers 200; rotation, grace window and single session (T16) |
 | `POST /auth/refresh/logout` | cookie | — | `{ message }`, cookie cleared | implemented |
 | `POST /auth/logout` | cookie | — | `{ message }` | implemented but unusable from a browser (wrong cookie Path); see parking lot |
