@@ -6,6 +6,7 @@ import { PasswordResetTokenRepository } from '@/common/repositories/password-res
 import { RefreshTokenRepository } from '@/common/repositories/refresh-token.repository';
 import { EmailService } from '@/common/email/email.service';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '@/common/prisma/prisma.service';
 
 describe('AuthService', () => {
   it('should be defined', () => {
@@ -40,6 +41,7 @@ describe('AuthService', () => {
       refreshTokenRepository as unknown as RefreshTokenRepository,
       {} as EmailService,
       {} as ConfigService,
+      {} as PrismaService,
     );
 
     await expect(service.refresh('old-refresh-token')).resolves.toMatchObject({

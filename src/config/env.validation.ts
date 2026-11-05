@@ -49,6 +49,7 @@ const envSchema = z
       .default('1209600000')
       .transform((val) => parseInt(val, 10))
       .pipe(z.number().int().positive()),
+    REFRESH_GRACE_MS: z.coerce.number().int().positive().default(30000),
 
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])

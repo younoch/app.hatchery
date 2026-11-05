@@ -10,11 +10,12 @@ import * as bcrypt from 'bcrypt';
 import { AppException } from '@/common/errors/app.exception';
 import { ErrorCode } from '@/common/errors/error-codes';
 import { UserService } from '../user/user.service';
-import { User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { PasswordResetTokenRepository } from '@/common/repositories/password-reset-token.repository';
 import { EmailService } from '@/common/email/email.service';
 import { ConfigService } from '@nestjs/config';
 import { RefreshTokenRepository } from '@/common/repositories/refresh-token.repository';
+import { PrismaService } from '@/common/prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
@@ -25,6 +26,7 @@ export class AuthService {
     private refreshTokenRepository: RefreshTokenRepository,
     private emailService: EmailService,
     private configService: ConfigService,
+    private prisma: PrismaService,
   ) {}
 
   async validateUser(username: string, password: string): Promise<User | null> {
@@ -57,11 +59,15 @@ export class AuthService {
     }
 
     const payload = { email: user.email, sub: user.id };
-    const refreshToken = await this.issueRefreshToken(user.id);
+    // Single session: a new login ends every older session of this user.
+    const refreshToken = await this.prisma.$transaction(async (tx) => {
+      await this.refreshTokenRepository.revokeAllForUser(user.id, tx);
+      return this.issueRefreshToken(user.id, crypto.randomUUID(), tx);
+    });
 
     return {
       access_token: this.jwtService.sign(payload),
-      refresh_token: refreshToken,
+      refresh_token: refreshToken.rawToken,
     };
   }
 
@@ -126,14 +132,24 @@ export class AuthService {
     return crypto.createHash('sha256').update(token).digest('hex');
   }
 
-  private async issueRefreshToken(userId: string): Promise<string> {
+  private async issueRefreshToken(
+    userId: string,
+    familyId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<{ id: string; rawToken: string }> {
     const rawToken = crypto.randomBytes(32).toString('base64url');
     const hashedToken = this.hashToken(rawToken);
     const ttlMs = this.configService.getOrThrow<number>('refreshTokenTtlMs');
     const expiresAt = new Date(Date.now() + ttlMs);
 
-    await this.refreshTokenRepository.create(userId, hashedToken, expiresAt);
-    return rawToken;
+    const row = await this.refreshTokenRepository.create(
+      userId,
+      hashedToken,
+      expiresAt,
+      familyId,
+      tx,
+    );
+    return { id: row.id, rawToken };
   }
 
   async refresh(rawToken: string) {
@@ -141,23 +157,79 @@ export class AuthService {
     const stored =
       await this.refreshTokenRepository.findByHashedToken(hashedToken);
 
-    if (!stored || stored.revoked || stored.expiresAt < new Date()) {
+    if (!stored || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
-
-    await this.refreshTokenRepository.revoke(stored.id);
 
     const user = await this.userService.findById(stored.userId);
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const payload = { email: user.email, sub: user.id };
-    const newRefreshToken = await this.issueRefreshToken(user.id);
+    const graceMs = this.configService.getOrThrow<number>('refreshGraceMs');
 
+    // Every session_revoked outcome is decided inside the transaction and
+    // returned as null, so a family revoke is committed, not rolled back.
+    const issued = await this.prisma.$transaction(async (tx) => {
+      const rotated =
+        !stored.revoked &&
+        (await this.refreshTokenRepository.revokeIfActive(stored.id, tx)) === 1;
+
+      if (rotated) {
+        const child = await this.issueRefreshToken(
+          user.id,
+          stored.familyId,
+          tx,
+        );
+        await this.refreshTokenRepository.setReplacedBy(
+          stored.id,
+          child.id,
+          tx,
+        );
+        return child;
+      }
+
+      // Already revoked: by an earlier rotation, a takeover, or a concurrent
+      // request that won the race a moment ago.
+      const current = await this.refreshTokenRepository.findByHashedToken(
+        hashedToken,
+        tx,
+      );
+      const successor = current?.replacedBy;
+      const inGrace =
+        !!successor &&
+        !successor.revoked &&
+        Date.now() - successor.createdAt.getTime() < graceMs;
+
+      if (!current || !inGrace) {
+        // Reuse outside the grace window: end the whole family.
+        await this.refreshTokenRepository.revokeFamily(stored.familyId, tx);
+        return null;
+      }
+
+      // Grace is single-use. A second attempt does not revoke the family,
+      // because that would log out the client that already succeeded.
+      const claimed = await this.refreshTokenRepository.claimGrace(
+        current.id,
+        tx,
+      );
+      if (claimed === 0) return null;
+
+      return this.issueRefreshToken(user.id, current.familyId, tx);
+    });
+
+    if (!issued) {
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        ErrorCode.SESSION_REVOKED,
+        'Session has ended',
+      );
+    }
+
+    const payload = { email: user.email, sub: user.id };
     return {
       access_token: this.jwtService.sign(payload),
-      refresh_token: newRefreshToken,
+      refresh_token: issued.rawToken,
     };
   }
 
@@ -167,7 +239,7 @@ export class AuthService {
       await this.refreshTokenRepository.findByHashedToken(hashedToken);
 
     if (stored) {
-      await this.refreshTokenRepository.revoke(stored.id);
+      await this.refreshTokenRepository.revokeFamily(stored.familyId);
     }
 
     return { message: 'Logged out successfully' };

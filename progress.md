@@ -43,7 +43,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | endpoint | auth / permission | request | `data` | status |
 |---|---|---|---|---|
 | `POST /auth/login` | none | `{ username, password }` (today `{ email, password }`) | `{ access_token }` + cookie `refresh_token` (httpOnly, Path `/auth/refresh`, 14 days) | implemented; username planned (T8) |
-| `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; hardening planned (T16) |
+| `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; rotation hardened (T16a); T16b pending |
 | `POST /auth/refresh/logout` | cookie | — | `{ message }`, cookie cleared | implemented |
 | `POST /auth/logout` | cookie | — | `{ message }` | implemented but unusable from a browser (wrong cookie Path); see parking lot |
 | `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 `email_disabled` when `EMAIL_ENABLED=false` |

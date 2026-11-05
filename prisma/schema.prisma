@@ -54,13 +54,21 @@ model PasswordResetToken {
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique   // hashed, plaintext না রাখা ভালো
-  revoked   Boolean  @default(false)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  id                String         @id @default(uuid())
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token             String         @unique // hashed, plaintext না রাখা ভালো
+  revoked           Boolean        @default(false)
+  expiresAt         DateTime
+  createdAt         DateTime       @default(now())
+  familyId          String
+  replacedByTokenId String?
+  replacedBy        RefreshToken?  @relation("RefreshTokenReplacement", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replaces          RefreshToken[] @relation("RefreshTokenReplacement")
+  graceUsedAt       DateTime?
+
+  @@index([userId])
+  @@index([familyId])
 }
 
 enum VerificationStatus {

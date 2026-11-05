@@ -17,5 +17,6 @@ export default () => ({
     process.env.REFRESH_TOKEN_TTL_MS || '1209600000',
     10,
   ),
+  refreshGraceMs: parseInt(process.env.REFRESH_GRACE_MS || '30000', 10),
   databaseUrl: process.env.DATABASE_URL,
 });

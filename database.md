@@ -99,7 +99,7 @@ Deliberately absent in the pilot: `isLate`, `needsReview` (derive `isLate` from 
 | expiresAt | DateTime | yes | - | |
 | createdAt | DateTime | yes | now() | |
 
-Dormant while `EMAIL_ENABLED=false`. onDelete Cascade (PLANNED, T5).
+Dormant while `EMAIL_ENABLED=false`. onDelete Cascade.
 
 ### PasswordResetToken
 | field | type | required | default | notes |
@@ -122,9 +122,9 @@ Dormant while `EMAIL_ENABLED=false`. onDelete Cascade (PLANNED, T5).
 | revoked | Boolean | yes | false | |
 | expiresAt | DateTime | yes | - | `REFRESH_TOKEN_TTL_MS` from each rotation (sliding) |
 | createdAt | DateTime | yes | now() | |
-| familyId | String | yes | - | PLANNED (T16). Token family for reuse detection |
-| replacedByTokenId | String | no | - | PLANNED (T16). Self FK for the grace window |
-| graceUsedAt | DateTime | no | - | PLANNED (T16). Set once when the token is accepted again inside the grace window |
+| familyId | String | yes | - | Token family for reuse detection |
+| replacedByTokenId | String | no | - | Self FK for the grace window |
+| graceUsedAt | DateTime | no | - | Set once when the token is accepted again inside the grace window |
 
 ### VerificationStatus (enum)
 PENDING, SENT, VERIFIED, EXPIRED.
@@ -167,6 +167,7 @@ Global roles `admin`, `manager`, `staff` with the default templates from `AGENTS
 | 20260927120000_remove_tax_task | Dropped TaxTask and TaskStatus |
 | 20260927183537_add_refresh_token | RefreshToken |
 | 20261030195922_cascade_auth_tables | onDelete Cascade on EmailVerification, PasswordResetToken, RefreshToken |
+| 20261104144709_refresh_token_family | RefreshToken: familyId, replacedByTokenId, graceUsedAt, indexes |
 
 Add a row here after each migration is run (the folder name carries a timestamp).
 
