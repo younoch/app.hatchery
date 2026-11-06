@@ -20,13 +20,13 @@
 | isActive | Boolean | yes | true | false blocks login and refresh |
 | mustChangePassword | Boolean | yes | false ||
 | isSuperAdmin | Boolean | yes | false | DB-only, not settable via API |
-| organizationId | String | no | - | PLANNED (T10). FK to Organization. Null only for the super admin (and legacy signup users) |
+| organizationId | String | no | - | FK to Organization. Null only for the super admin (and legacy signup users) |
 | roleId | String | no | - | FK to Role (global). Null for the super admin |
 | createdAt | DateTime | yes | now() | |
 | updatedAt | DateTime | yes | updatedAt | |
 
 Relations: Role (optional), Organization (optional), EmailVerification[], PasswordResetToken[], RefreshToken[], Reading[].
-Unique: `username`, `email`. Index: `[organizationId]` (PLANNED).
+Unique: `username`, `email`. Index: `[organizationId]`.
 
 ### Role (global)
 | field | type | required | default | notes |
@@ -38,7 +38,6 @@ Unique: `username`, `email`. Index: `[organizationId]` (PLANNED).
 Relations: User[], OrganizationRole[]. Deleting a role that is in use is blocked (Restrict).
 
 ### Organization
-PLANNED (T10).
 | field | type | required | default | notes |
 |---|---|---|---|---|
 | id | String | yes | uuid() | Primary key |
@@ -48,7 +47,7 @@ Nothing else for now (no timestamps, no other fields). Relations: User[], Organi
 The "exactly one admin" rule is enforced in the service layer, not by the database.
 
 ### OrganizationRole
-PLANNED (T10). The permissions a role has inside one organization.
+The permissions a role has inside one organization.
 | field | type | required | default | notes |
 |---|---|---|---|---|
 | id | String | yes | uuid() | Primary key |
@@ -168,6 +167,7 @@ Global roles `admin`, `manager`, `staff` with the default templates from `AGENTS
 | 20260927183537_add_refresh_token | RefreshToken |
 | 20261030195922_cascade_auth_tables | onDelete Cascade on EmailVerification, PasswordResetToken, RefreshToken |
 | 20261104144709_refresh_token_family | RefreshToken: familyId, replacedByTokenId, graceUsedAt, indexes |
+| 20261106065951_add_organizations | Organization, OrganizationRole, User.organizationId |
 
 Add a row here after each migration is run (the folder name carries a timestamp).
 

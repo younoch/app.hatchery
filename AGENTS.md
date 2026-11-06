@@ -145,7 +145,7 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 
 ## Tenant isolation (security-critical)
 
-* All organization-scoped data (users, tanks, readings, organization roles) is reached through one helper: `resolveOrganizationId(caller, requested?)` (planned, T10).
+* All organization-scoped data (users, tanks, readings, organization roles) is reached through one helper: `resolveOrganizationId(caller, requested?)`.
   * Normal user: their own organization. A different `requested` organization → 403 `organization_mismatch`. No organization → 403 `no_organization`.
   * Super admin: `organizationId` is required (query or body); missing → 400 `organization_required`.
 * There are no global lists. `GET /users` is always "the users of one organization".

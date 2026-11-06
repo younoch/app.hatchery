@@ -24,6 +24,10 @@ model User {
   isSuperAdmin  Boolean  @default(false)
   roleId String?
   role   Role?   @relation(fields: [roleId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
 }
 
 model Role {
@@ -31,6 +35,25 @@ model Role {
   name        String   @unique
   permissions String[]
   users       User[]
+  organizationRoles OrganizationRole[]
+}
+
+model Organization {
+  id                String             @id @default(uuid())
+  name              String
+  users             User[]
+  organizationRoles OrganizationRole[]
+}
+
+model OrganizationRole {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roleId         String
+  role           Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  permissions    String[]
+
+  @@unique([organizationId, roleId])
 }
 
 model EmailVerification {

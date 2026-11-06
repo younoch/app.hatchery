@@ -125,7 +125,7 @@ export class UserService {
       username: user.username,
       name: user.name,
       isSuperAdmin: user.isSuperAdmin,
-      organizationId: null, // TODO(T10): real organizationId
+      organizationId: user.organizationId,
       permissions,
       mustChangePassword: user.mustChangePassword,
       role: user.role ? { name: user.role.name } : null,

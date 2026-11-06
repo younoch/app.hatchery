@@ -3,4 +3,5 @@ export interface JwtUser {
   email: string;
   isSuperAdmin: boolean;
   mustChangePassword: boolean;
+  organizationId: string | null;
 }
