@@ -27,7 +27,8 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T7 | Permission map refactor (per-resource actions, platform vs org scope); resolver stays on `Role.permissions` until T10 | Done | |
 | T8 | (released together with T4) User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | Done | T6, T7 | status 201
 | T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | Done | T7, T8 |
-| T10 | `Organization`, `OrganizationRole`, `User.organizationId`; `resolveOrganizationId`; `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; resolver switches to `OrganizationRole`; `assignRole` can no longer assign `admin` | not started | T8, T9 |
+| T10a | `Organization`, `OrganizationRole`, `User.organizationId` (migration, dev DB reset); `resolveOrganizationId`; resolver switches to `OrganizationRole`; `GET /users/me` returns the real `organizationId` | in progress | T8, T9 |
+| T10b | `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; `assignRole` can no longer assign `admin` and rejects targets outside the caller's organization; `deleteUser` refuses the organization's admin | not started | T10a |
 | T11 | Admin user management: `POST /users`, `PATCH /users/:id`, `POST /users/:id/reset-password`, `GET /users?organizationId=`; `mustChangePassword` enforcement | not started | T10 |
 | T12 | `GET/PATCH /organization-roles` | not started | T10 |
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
@@ -48,8 +49,8 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /auth/logout` | cookie | — | `{ message }` | implemented but unusable from a browser (wrong cookie Path); see parking lot |
 | `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 `email_disabled` when `EMAIL_ENABLED=false` |
 | `GET /users/me` | Bearer | — | `{ id, email, username, name, isSuperAdmin, organizationId, permissions (always an array, never missing), mustChangePassword, role: { name } \| null }` | implemented (T4, T8). `organizationId` is always `null` until T10 |
-| `PATCH /users/me/password` | Bearer | `{ currentPassword, newPassword }` | `{ message, access_token }` + new `refresh_token` cookie | implemented as `/user/me/password` returning `{ message }` (T4); T11/T16: clears `mustChangePassword`, revokes all older refresh tokens, issues a fresh pair (the cookie Path means the endpoint cannot tell which token is the current one) |
-| `GET /users` | `user:read` | `page, pageSize, organizationId` | `{ items, meta }` (below) | implemented (T16): clears `mustChangePassword`, revokes all older refresh tokens and issues a fresh pair (the cookie Path means the endpoint cannot tell which token is the current one) |
+| `PATCH /users/me/password` | Bearer | `{ currentPassword, newPassword }` | `{ message, access_token }` + new `refresh_token` cookie | implemented (T16): clears `mustChangePassword`, revokes all older refresh tokens and issues a fresh pair (the cookie Path means the endpoint cannot tell which token is the current one) |
+| `GET /users` | `user:read` | `page, pageSize, organizationId` | `{ items, meta }` (below) | implemented (T4); a global list today, per-organization with the `organizationId` filter in T11 ||
 | `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | user | planned (T11). `roleId` can never be `admin` |
 | `PATCH /users/:id` | `user:write` | `{ roleId?, isActive?, name? }` | user | planned (T11) |
 | `POST /users/:id/reset-password` | `user:reset-password` | `{ temporaryPassword }` | `{ message }` | planned (T11) |
@@ -164,6 +165,8 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-10-29: Build order: auth first (T2, T3, T5, T6, T7, T4+T8, T9, T13, T16), then organizations and the domain (T10–T12, T14, T15, T17).
 * 2026-10-30: Login throttling for the pilot is by username (10/min) plus a loose per-IP ceiling (120/min), because mobile-network IPs are shared and unstable. Account lockout is deferred until after the pilot presentation.
 * 2026-11-05: `POST /auth/login` and `/auth/refresh` answer 200, not 201. Access token lifetime is 15m in the pilot (a short token bounds how long an older device works after a takeover). Password change and reset revoke all refresh tokens; the change route lives in `AuthModule` to avoid a circular module dependency.
+* 2026-11-06: The frontend starts its backend integration after T10 and T11 (auth, organizations and user management together). The `COORDINATION.md` go-signal (B→F-25) and the frontend repo sync happen then. T10 is delivered in two commits: T10a (schema, resolver, helper) and T10b (organization endpoints and admin rules).
+
 ## Open decisions
 
 | # | Decision | Needed by |
