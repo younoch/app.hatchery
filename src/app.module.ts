@@ -5,19 +5,21 @@ import { IncomingMessage, ServerResponse } from 'http';
 import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { AppThrottlerGuard } from './common/throttler/app-throttler.guard';
-import { createThrottlerOptions } from './common/throttler/throttler.config';
-
-import { AuthModule } from './modules/auth/auth.module';
-import { UserModule } from './modules/user/user.module';
-import { PrismaModule } from './common/prisma/prisma.module';
-import { HealthModule } from './modules/health/health.module';
-import appConfig from './config/app.config';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { validateEnv } from './config/env.validation';
-import { BullmqModule } from '@/common/bullmq/bullmq.module';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
+
+import { AppThrottlerGuard } from '@/common/throttler/app-throttler.guard';
+import { createThrottlerOptions } from '@/common/throttler/throttler.config';
+import { PrismaModule } from '@/common/prisma/prisma.module';
+import appConfig from './config/app.config';
+import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
+import { validateEnv } from './config/env.validation';
+import { BullmqModule } from '@/common/bullmq/bullmq.module';
+
+import { AuthModule } from '@/modules/auth/auth.module';
+import { UserModule } from '@/modules/user/user.module';
+import { OrganizationModule } from '@/modules/organization/organization.module';
+import { HealthModule } from '@/modules/health/health.module';
 
 @Module({
   imports: [
@@ -78,11 +80,12 @@ import { ExpressAdapter } from '@bull-board/express';
       adapter: ExpressAdapter,
     }),
 
-    AuthModule,
-    UserModule,
     PrismaModule,
     HealthModule,
     BullmqModule,
+    AuthModule,
+    UserModule,
+    OrganizationModule,
   ],
   providers: [
     {

@@ -51,7 +51,7 @@ function toFieldError(
       if (message.includes('one letter and one number')) {
         return { field, code: ErrorCode.WEAK_PASSWORD };
       }
-      if (field === 'username') {
+      if (field === 'username' || field.endsWith('.username')) {
         return { field, code: ErrorCode.INVALID_USERNAME };
       }
       return { field, code: ErrorCode.INVALID_FORMAT };

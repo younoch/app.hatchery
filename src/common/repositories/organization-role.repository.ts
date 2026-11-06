@@ -16,4 +16,19 @@ export class OrganizationRoleRepository {
       where: { organizationId_roleId: { organizationId, roleId } },
     });
   }
+
+  createMany(
+    organizationId: string,
+    rows: { roleId: string; permissions: string[] }[],
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client.organizationRole.createMany({
+      data: rows.map((row) => ({
+        organizationId,
+        roleId: row.roleId,
+        permissions: row.permissions,
+      })),
+    });
+  }
 }

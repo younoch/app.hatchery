@@ -27,9 +27,57 @@ export class UserRepository {
     });
   }
 
-  findById(id: string) {
-    return this.prisma.user.findUnique({
+  findById(id: string, tx?: Prisma.TransactionClient) {
+    const client = tx ?? this.prisma;
+    return client.user.findUnique({
       where: { id },
+      omit: { password: true },
+    });
+  }
+
+  findByUsername(username: string, tx?: Prisma.TransactionClient) {
+    const client = tx ?? this.prisma;
+    return client.user.findUnique({
+      where: { username },
+      omit: { password: true },
+    });
+  }
+
+  findAdminOfOrganization(
+    organizationId: string,
+    adminRoleId: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client.user.findFirst({
+      where: { organizationId, roleId: adminRoleId },
+      omit: { password: true },
+    });
+  }
+
+  createInOrganization(
+    data: {
+      email: string;
+      username: string;
+      name?: string;
+      hashedPassword: string;
+      organizationId: string;
+      roleId: string;
+      mustChangePassword: boolean;
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client.user.create({
+      data: {
+        email: data.email,
+        username: data.username,
+        name: data.name,
+        password: data.hashedPassword,
+        organizationId: data.organizationId,
+        roleId: data.roleId,
+        mustChangePassword: data.mustChangePassword,
+      },
       omit: { password: true },
     });
   }

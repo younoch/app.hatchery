@@ -3,21 +3,22 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  HttpStatus,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { HttpStatus } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, VerificationStatus } from '@prisma/client';
 
-import { UserRepository } from '../../common/repositories/user.repository';
-import { EmailVerificationRepository } from './repository/email-verification.repository';
+import type { JwtUser } from '@/common/types/jwt-user.type';
+import { UserPermissionResolver } from '@/common/permissions/user-permission.resolver';
 import { PrismaService } from '@/common/prisma/prisma.service';
-import { VerificationStatus } from '@prisma/client';
-import { RoleRepository } from '../role/repository/role.repository';
 import { paginate } from '@/common/helpers/paginate.helper';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { AppException } from '@/common/errors/app.exception';
 import { ErrorCode } from '@/common/errors/error-codes';
-import { UserPermissionResolver } from '@/common/permissions/user-permission.resolver';
+
+import { UserRepository } from '../../common/repositories/user.repository';
+import { EmailVerificationRepository } from './repository/email-verification.repository';
+import { RoleRepository } from '../role/repository/role.repository';
 @Injectable()
 export class UserService {
   constructor(
@@ -140,30 +141,51 @@ export class UserService {
         'You cannot delete your own account',
       );
     }
+    const target = await this.userRepository.findByIdWithRole(userId);
+    if (!target) {
+      throw new NotFoundException('User not found');
+    }
+    if (target.organizationId && target.role?.name === 'admin') {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.ORG_ADMIN_PROTECTED,
+        "The organization's admin cannot be deleted",
+      );
+    }
     return this.userRepository.deleteUser(userId);
   }
-  async assignRole(
-    targetUserId: string,
-    roleId: string,
-    currentUserId: string,
-  ) {
+  async assignRole(targetUserId: string, roleId: string, caller: JwtUser) {
     const targetRole = await this.roleRepository.findById(roleId);
     if (!targetRole) {
       throw new NotFoundException('Role not found');
     }
-
     if (targetRole.name === 'admin') {
-      const currentUser =
-        await this.userRepository.findByIdWithRole(currentUserId);
-      if (!currentUser?.isSuperAdmin) {
-        throw new ForbiddenException(
-          'Only a super admin can assign the admin role',
-        );
-      }
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        ErrorCode.PERMISSION_DENIED,
+        'The admin role is assigned only when an organization is created or by admin transfer',
+      );
+    }
+
+    const target = await this.userRepository.findByIdWithRole(targetUserId);
+    // Outside the caller's organization: 404, so existence is not revealed.
+    if (
+      !target ||
+      (!caller.isSuperAdmin && target.organizationId !== caller.organizationId)
+    ) {
+      throw new NotFoundException('User not found');
+    }
+    if (target.role?.name === 'admin') {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.ORG_ADMIN_PROTECTED,
+        "The organization's admin changes only through admin transfer",
+      );
     }
 
     return this.userRepository.updateRole(targetUserId, roleId);
   }
+
   async updatePassword(
     userId: string,
     currentPassword: string,

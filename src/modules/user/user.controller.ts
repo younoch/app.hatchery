@@ -58,7 +58,7 @@ export class UserController {
     return await this.userService.assignRole(
       id,
       dto.roleId,
-      currentUser.userId,
+      currentUser,
     );
   }
 }

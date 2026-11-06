@@ -28,7 +28,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T8 | (released together with T4) User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | Done | T6, T7 | status 201
 | T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | Done | T7, T8 |
 | T10a | `Organization`, `OrganizationRole`, `User.organizationId` (migration, dev DB reset); `resolveOrganizationId`; resolver switches to `OrganizationRole`; `GET /users/me` returns the real `organizationId` | done | T8, T9 |
-| T10b | `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; `assignRole` can no longer assign `admin` and rejects targets outside the caller's organization; `deleteUser` refuses the organization's admin | not started | T10a |
+| T10b | `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; `assignRole` can no longer assign `admin` and rejects targets outside the caller's organization; `deleteUser` refuses the organization's admin | done| T10a |
 | T11 | Admin user management: `POST /users`, `PATCH /users/:id`, `POST /users/:id/reset-password`, `GET /users?organizationId=`; `mustChangePassword` enforcement | not started | not started | T10b |
 | T12 | `GET/PATCH /organization-roles` | not started | T10b |
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
@@ -56,9 +56,9 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /users/:id/reset-password` | `user:reset-password` | `{ temporaryPassword }` | `{ message }` | planned (T11) |
 | `DELETE /users/:id` | `user:delete` (super admin) | — | `{ message }` | implemented as `/user/:id` (T4, T5) |
 | `GET/POST /roles`, `/roles/:id` | super admin | see Swagger | Role | implemented (global role CRUD) |
-| `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | organization + admin | planned (T10). One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |
-| `GET /organizations` | `organization:read` | `page, pageSize` | `{ items, meta }` | planned (T10) |
-| `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | planned (T10) |
+| `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | { id, name, admin: { id, username, email, name } }` | planned (T10b). One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |
+| `GET /organizations` | `organization:read` | `page, pageSize` | `{ items: [{ id, name }], meta }` | planned (T10b) |
+| `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | planned (T10b). 404 for an unknown organization or a user outside it; 409 `conflict` if the new admin is inactive; 400 `bad_request` if the user is already the admin or `previousAdminRoleId` is the admin role |
 | `GET /organization-roles` | `organization-role:read` | `organizationId` (super admin) | `[{ id, roleId, name, permissions, editable }]` | planned (T12) |
 | `PATCH /organization-roles/:id` | `organization-role:write` | `{ permissions }` (org-level keys only; `admin` row rejected) | the row | planned (T12) |
 | `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; not paginated). Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | planned (T14) |
@@ -144,6 +144,8 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | `payload_too_large` | 413 | request body over 100 KB |
 | `bad_request` | 400 | generic bad request without a specific code (default for plain 400) |
 | `internal_error` | 500 | unexpected server error |
+| `username_taken` | 409 | the username already exists |
+| `email_taken` | 409 | the email already exists |
 
 ## Decisions log
 
@@ -166,6 +168,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-10-30: Login throttling for the pilot is by username (10/min) plus a loose per-IP ceiling (120/min), because mobile-network IPs are shared and unstable. Account lockout is deferred until after the pilot presentation.
 * 2026-11-05: `POST /auth/login` and `/auth/refresh` answer 200, not 201. Access token lifetime is 15m in the pilot (a short token bounds how long an older device works after a takeover). Password change and reset revoke all refresh tokens; the change route lives in `AuthModule` to avoid a circular module dependency.
 * 2026-11-06: The frontend starts its backend integration after T10 and T11 (auth, organizations and user management together). The `COORDINATION.md` go-signal (B→F-25) and the frontend repo sync happen then. T10 is delivered in two commits: T10a (schema, resolver, helper) and T10b (organization endpoints and admin rules).
+* 2026-11-06: Admin transfer locks the organization row (`SELECT ... FOR UPDATE`) so two transfers cannot leave two admins. `PATCH /users/:id/role` stays until T11 replaces it with `PATCH /users/:id`; until then it can never assign `admin`, never touches the organization's admin, and answers 404 for a target outside the caller's organization.
 
 ## Open decisions
 
