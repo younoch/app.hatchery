@@ -75,8 +75,10 @@ src/
 │   ├── auth/
 │   ├── user/
 │   ├── role/
+│   ├── organization/
+│   ├── organization-role/
 │   ├── health/
-│   └── (planned) organization/ organization-role/ tank/ reading/
+│   └── (planned) tank/ reading/
 └── test/
 ```
 
@@ -176,7 +178,7 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 * The JWT carries only `sub` (+ `email`). Permissions are never in the token.
 * Access token lifetime: \TOKEN_EXPIRATION`, default `1h`; the pilot uses `15m`, because a short access token bounds how long an older device keeps working after a takeover.`
 * Password policy: at least one letter and one number.
-* Rate limits (planned, T3): routes with a valid token are limited per user id (default 120/min; `POST /readings/sync` 30/min); `/auth/login` 10/min per username (lowercased) plus a loose ceiling of 120/min per IP; `/auth/refresh` 60/min per IP; other tokenless routes 100/min per IP. Authenticated traffic is never limited by IP, because field staff share public IPs (hatchery Wi-Fi, mobile-network CGNAT). The login ceiling per IP is loose for the same reason: it only stops floods, it never identifies a person. Values: `progress.md` → Rate limits.
+* Rate limits: routes with a valid token are limited per user id (default 120/min; `POST /readings/sync` 30/min); `/auth/login` 10/min per username (lowercased) plus a loose ceiling of 120/min per IP; `/auth/refresh` 60/min per IP; other tokenless routes 100/min per IP. Authenticated traffic is never limited by IP, because field staff share public IPs (hatchery Wi-Fi, mobile-network CGNAT). The login ceiling per IP is loose for the same reason: it only stops floods, it never identifies a person. Values: `progress.md` → Rate limits.
 * A 429 returns `code: rate_limited` and a `Retry-After` header that CORS exposes to the browser.
 
 ### Refresh tokens

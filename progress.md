@@ -2,9 +2,9 @@
 
 ## Current state
 
-Implemented (T2–T11, T13, T16): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows, user management (list, create, update, deactivate, reset password, delete), the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
+Implemented (T2–T13, T16): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): editing role permissions per organization (T12), tanks (T14), readings sync (T15), the admin-action log (T17).
+Not implemented (marked **planned** below): tanks (T14), readings sync (T15), the admin-action log (T17).
 
 Known bugs today:
 
@@ -31,7 +31,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T10b | `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; `assignRole` can no longer assign `admin` and rejects targets outside the caller's organization; `deleteUser` refuses the organization's admin | done | T10a |
 | T11a | `GET /users` scoped to one organization; `POST /users` (temporary password, `mustChangePassword`); one user response shape; a shared username and email availability check | done | T10b |
 | T11b | `PATCH /users/:id` (role, active, name); `POST /users/:id/reset-password`; deactivation revokes sessions; the temporary `PATCH /users/:id/role` is removed | done | T11a |
-| T12 | `GET/PATCH /organization-roles`; the `admin` role gets every org key in the resolver; remove the `organization-role:read` key (map, templates, seed) | not started | T10b |
+| T12 | `GET/PATCH /organization-roles`; the `admin` role gets every org key in the resolver; remove the `organization-role:read` key (map, templates, seed) | done | T10b |
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10a |
 | T15 | `Reading` model; `POST /readings/sync` | not started | T6, T14 |
@@ -60,8 +60,8 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | `{ id, name, admin: { id, username, email, name } }` | One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |
 | `GET /organizations` | `organization:read` | `page, pageSize` | `{ items: [{ id, name }], meta }` | |
 | `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | 404 for an unknown organization or a user outside it; 409 `conflict` if the new admin is inactive; 400 `bad_request` if the user is already the admin or `previousAdminRoleId` is the admin role |
-| `GET /organization-roles` | any organization member (no key) | `organizationId` (super admin; required) | `[{ id, roleId, name, permissions, editable }]`, not paginated. The `admin` entry lists every org key and has `editable: false`. Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | planned (T12) |
-| `PATCH /organization-roles/:id` | `organization-role:write` | `{ permissions }` (the full new list; org-level keys only; duplicates ignored) | the row, same shape as a list item | planned (T12). A row of another organization: 404. The `admin` row: 403 `permission_denied`. Adding a key the caller does not hold: 403 `permission_denied` (removing is allowed). A platform or unknown key: 400 `validation_failed` with `field: permissions`, `code: not_allowed`. Effective on the next request; the client sees it at its next `GET /users/me` |
+| `GET /organization-roles` | any organization member (no key) | `organizationId` (super admin; required) | `[{ id, roleId, name, permissions, editable }]`, not paginated. The `admin` entry lists every org key and has `editable: false`. Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | implemented (T12) |
+| `PATCH /organization-roles/:id` | `organization-role:write` | `{ permissions }` (the full new list; org-level keys only; duplicates ignored) | the row, same shape as a list item | implemented (T12). A row of another organization: 404. The `admin` row: 403 `permission_denied`. Adding a key the caller does not hold: 403 `permission_denied` (removing is allowed). A platform or unknown key: 400 `validation_failed` with `field: permissions`, `code: not_allowed`. Effective on the next request; the client sees it at its next `GET /users/me` |
 | `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; not paginated). Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | planned (T14) |
 | `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name }`; `{ name?, isActive? }` | tank | planned (T14) |
 | `POST /readings/sync` | `reading:create` | see below | see below | planned (T15) |
