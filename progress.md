@@ -2,15 +2,15 @@
 
 ## Current state
 
-Implemented: auth (login by email, httpOnly refresh cookie with rotation, password change, forgot/reset password, email verification through BullMQ), RBAC with global roles and a DB-only super admin, user list / delete / role assignment, pagination, response envelope, health checks, pino logging.
+Implemented (T2–T11, T13, T16): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows, user management (list, create, update, deactivate, reset password, delete), the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented: everything marked **planned** below — organizations, per-organization permissions, username login, admin user management, tanks, readings sync, the error-code contract, session hardening.
+Not implemented (marked **planned** below): editing role permissions per organization (T12), tanks (T14), readings sync (T15), the admin-action log (T17).
 
 Known bugs today:
 
 * The refresh token lifetime is sliding, not fixed (each rotation gets a fresh 14 days).
 
-Frontend (`hatchery-frontend`): Step 21 (offline sync) waits on the Readings contract below and builds a mock adapter from it.
+Frontend (`hatchery-frontend`): Step 21d switches to the real auth, organization and user API (B→F-25); Step 21 (offline sync) follows against a mock built from the Readings contract below.
 
 ## Task plan
 
@@ -25,7 +25,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T5 | `onDelete: Cascade` on the three auth tables; map Prisma `P2003` to 409 `conflict`; `deleteUser` blocks self, the org admin, and users who own readings (self-block now; org admin with T10, readings with T15) | done | |
 | T6 | Error contract: `code` on every error, `errors: [{ field, code, params }]` via a `ValidationPipe` `exceptionFactory`, code list as constants; validation errors carry the top-level code `validation_failed`; oversized bodies answer 413 `payload_too_large` | Done | |
 | T7 | Permission map refactor (per-resource actions, platform vs org scope); resolver stays on `Role.permissions` until T10 | Done | |
-| T8 | (released together with T4) User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | Done | T6, T7 | status 201
+| T8 | (released together with T4) User fields `username`, `name`, `isActive`, `mustChangePassword`; login by username; `GET /users/me` new shape; `JwtStrategy.validate` loads the user per request; `user_inactive`, `must_change_password` | Done | T6, T7 |
 | T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | Done | T7, T8 |
 | T10a | `Organization`, `OrganizationRole`, `User.organizationId` (migration, dev DB reset); `resolveOrganizationId`; resolver switches to `OrganizationRole`; `GET /users/me` returns the real `organizationId` | done | T8, T9 |
 | T10b | `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; `assignRole` can no longer assign `admin` and rejects targets outside the caller's organization; `deleteUser` refuses the organization's admin | done | T10a |
@@ -55,9 +55,9 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | the user shape | implemented (T11a). `mustChangePassword` is true. `roleId` can never be `admin` (403 `permission_denied`) and must exist among the organization's roles (400 `bad_request`). 409 `username_taken` or `email_taken`. `organizationId` only for the super admin |
 | `PATCH /users/:id` | `user:write` | `{ roleId?, isActive?, name? }` (at least one field) | the user shape | implemented (T11b). A target outside your organization (or a super admin account): 404. Role change or deactivation of the organization's admin: 409 `org_admin_protected`. Changing your own role or active flag: 409 `cannot_target_self`. `roleId` admin: 403 `permission_denied`. Deactivating revokes all of the user's refresh tokens |
 | `POST /users/:id/reset-password` | `user:reset-password` | `{ temporaryPassword }` | `{ message }` | implemented (T11b). Sets `mustChangePassword` and revokes all sessions. A target outside your organization: 404. The organization's admin: only the super admin (else 403 `permission_denied`). Your own account: 409 `cannot_target_self` (use `PATCH /users/me/password`) |
-| `DELETE /users/:id` | `user:delete` (super admin) | — | `{ message }` | implemented (T4, T5). Super admin only. 404 for an unknown user; 409 \cannot_target_self`; 409 `org_admin_protected` for an organization’s admin |`
+| `DELETE /users/:id` | `user:delete` (super admin) | — | `{ message }` | implemented (T4, T5). Super admin only. 404 for an unknown user; 409 `cannot_target_self`; 409 `org_admin_protected` for an organization's admin |
 | `GET/POST /roles`, `/roles/:id` | super admin | see Swagger | Role | implemented (global role CRUD) |
-| `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | \{ id, name, admin: { id, username, email, name } }` | One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |
+| `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | `{ id, name, admin: { id, username, email, name } }` | One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |
 | `GET /organizations` | `organization:read` | `page, pageSize` | `{ items: [{ id, name }], meta }` | |
 | `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | 404 for an unknown organization or a user outside it; 409 `conflict` if the new admin is inactive; 400 `bad_request` if the user is already the admin or `previousAdminRoleId` is the admin role |
 | `GET /organization-roles` | any organization member (no key) | `organizationId` (super admin; required) | `[{ id, roleId, name, permissions, editable }]`, not paginated. The `admin` entry lists every org key and has `editable: false`. Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | planned (T12) |
@@ -133,7 +133,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | `session_revoked` | 401 | the session ended: another device logged in, a refresh token was reused, or the password changed |
 | `unauthorized` | 401 | missing or invalid token |
 | `must_change_password` | 403 | change the temporary password first |
-|  `permission_denied` | 403 | missing permission, or an action the caller may not perform (granting a key you do not hold, editing the `admin` row) |
+| `permission_denied` | 403 | missing permission, or an action the caller may not perform (granting a key you do not hold, editing the `admin` row) |
 | `no_organization` | 403 | user has no organization |
 | `organization_mismatch` | 403 | asked for another organization |
 | `org_admin_protected` | 409 | action not allowed on the organization's admin (deactivate, delete, role change) |
