@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   UseGuards,
   Delete,
   Body,
@@ -16,8 +17,9 @@ import { RequirePermission } from '@/common/decorators/require-permission.decora
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { UserService } from './user.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
-import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { AllowMustChangePassword } from '@/common/decorators/allow-must-change-password.decorator';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
@@ -33,8 +35,21 @@ export class UserController {
   @RequirePermission('user:read')
   @UseGuards(PermissionsGuard)
   @Get()
-  async listUsers(@Query() query: PaginationQueryDto) {
-    return await this.userService.listUsers(query);
+  async listUsers(
+    @Query() query: ListUsersQueryDto,
+    @CurrentUser() currentUser: JwtUser,
+  ) {
+    return await this.userService.listUsers(query, currentUser);
+  }
+
+  @RequirePermission('user:create')
+  @UseGuards(PermissionsGuard)
+  @Post()
+  async createUser(
+    @Body() dto: CreateUserDto,
+    @CurrentUser() currentUser: JwtUser,
+  ) {
+    return await this.userService.createInOrganization(dto, currentUser);
   }
 
   @RequirePermission('user:delete')
@@ -55,10 +70,6 @@ export class UserController {
     @Body() dto: AssignRoleDto,
     @CurrentUser() currentUser: JwtUser,
   ) {
-    return await this.userService.assignRole(
-      id,
-      dto.roleId,
-      currentUser,
-    );
+    return await this.userService.assignRole(id, dto.roleId, currentUser);
   }
 }

@@ -88,18 +88,19 @@ export class UserRepository {
     });
   }
 
-  findAll(skip: number, take: number) {
+  findAll(organizationId: string, skip: number, take: number) {
     return this.prisma.user.findMany({
+      where: { organizationId },
       skip,
       take,
       omit: { password: true },
-      include: { role: true },
+      include: { role: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  count() {
-    return this.prisma.user.count();
+  count(organizationId: string) {
+    return this.prisma.user.count({ where: { organizationId } });
   }
 
   create(
