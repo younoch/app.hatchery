@@ -135,8 +135,8 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 * Whoever holds `organization-role:write` (by default the org admin) edits only the `permissions` of their own organization's `OrganizationRole` rows, only with org-level keys. The `admin` row is not editable.
 * **Nobody can grant a key they do not hold.** Adding a key the caller lacks → 403 `permission_denied`. Removing keys is allowed: the admin trusts whoever receives `organization-role:write`. The super admin holds every key.
 * Nobody can create roles or grant platform keys, so privilege escalation through role editing is closed by design.
-### Super admin
 
+### Super admin
 * `User.isSuperAdmin` is a DB-only boolean, not a role. It cannot be set through the API.
 * A partial unique index allows only one super admin.
 * Super admin bypasses permission checks. It does **not** bypass tenant rules: org-scoped endpoints still need an explicit organization (see below).
