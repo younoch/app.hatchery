@@ -8,6 +8,8 @@ import {
   Patch,
   Param,
   Query,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { JwtUser } from '../../common/types/jwt-user.type';
@@ -16,7 +18,8 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 import { RequirePermission } from '@/common/decorators/require-permission.decorator';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { UserService } from './user.service';
-import { AssignRoleDto } from './dto/assign-role.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { AllowMustChangePassword } from '@/common/decorators/allow-must-change-password.decorator';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -64,12 +67,24 @@ export class UserController {
 
   @RequirePermission('user:write')
   @UseGuards(PermissionsGuard)
-  @Patch(':id/role')
-  async assignRole(
+  @Patch(':id')
+  async updateUser(
     @Param('id') id: string,
-    @Body() dto: AssignRoleDto,
+    @Body() dto: UpdateUserDto,
     @CurrentUser() currentUser: JwtUser,
   ) {
-    return await this.userService.assignRole(id, dto.roleId, currentUser);
+    return await this.userService.updateUser(id, dto, currentUser);
+  }
+
+  @RequirePermission('user:reset-password')
+  @UseGuards(PermissionsGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/reset-password')
+  async resetPassword(
+    @Param('id') id: string,
+    @Body() dto: ResetUserPasswordDto,
+    @CurrentUser() currentUser: JwtUser,
+  ) {
+    return await this.userService.resetPassword(id, dto, currentUser);
   }
 }

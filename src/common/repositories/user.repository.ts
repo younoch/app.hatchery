@@ -143,6 +143,34 @@ export class UserRepository {
       omit: { password: true },
     });
   }
+
+  updateProfile(
+    userId: string,
+    data: { roleId?: string; isActive?: boolean; name?: string },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client.user.update({
+      where: { id: userId },
+      data,
+      omit: { password: true },
+      include: { role: { select: { id: true, name: true } } },
+    });
+  }
+
+  setTemporaryPassword(
+    userId: string,
+    hashedPassword: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword, mustChangePassword: true },
+      omit: { password: true },
+    });
+  }
+
   async findByIdWithRole(id: string, tx?: Prisma.TransactionClient) {
     const client = tx ?? this.prisma;
     return client.user.findUnique({

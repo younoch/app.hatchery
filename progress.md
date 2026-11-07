@@ -30,7 +30,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T10a | `Organization`, `OrganizationRole`, `User.organizationId` (migration, dev DB reset); `resolveOrganizationId`; resolver switches to `OrganizationRole`; `GET /users/me` returns the real `organizationId` | done | T8, T9 |
 | T10b | `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; `assignRole` can no longer assign `admin` and rejects targets outside the caller's organization; `deleteUser` refuses the organization's admin | done | T10a |
 | T11a | `GET /users` scoped to one organization; `POST /users` (temporary password, `mustChangePassword`); one user response shape; a shared username and email availability check | done | T10b |
-| T11b | `PATCH /users/:id` (role, active, name); `POST /users/:id/reset-password`; deactivation revokes sessions; the temporary `PATCH /users/:id/role` is removed | in progress | T11a |
+| T11b | `PATCH /users/:id` (role, active, name); `POST /users/:id/reset-password`; deactivation revokes sessions; the temporary `PATCH /users/:id/role` is removed | done | T11a |
 | T12 | `GET/PATCH /organization-roles` | not started | T10b |
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10a |
@@ -45,7 +45,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | endpoint | auth / permission | request | `data` | status |
 |---|---|---|---|---|
 | `POST /auth/login` | none | `{ username, password }` | `{ access_token }` + cookie `refresh_token` (httpOnly, Path `/auth/refresh`, 14 days) | implemented; answers 200 |
-| `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; answers 200; rotation, grace window and single session (T16); 401 \user_inactive` for a deactivated user (T11b)` |
+| `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; answers 200; rotation, grace window and single session (T16); 401 user_inactive` for a deactivated user (T11b)` |
 | `POST /auth/refresh/logout` | cookie | — | `{ message }`, cookie cleared | implemented |
 | `POST /auth/logout` | cookie | — | `{ message }` | implemented but unusable from a browser (wrong cookie Path); see parking lot |
 | `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 `email_disabled` when `EMAIL_ENABLED=false` |
@@ -54,7 +54,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `GET /users` | `user:read` | `page, pageSize, organizationId` (required for the super admin; a normal caller may only name their own) | `{ items, meta }`; each item is the user shape below | implemented (T11a). Always one organization, newest first. 400 `organization_required`, 403 `no_organization` or `organization_mismatch` |
 | `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | the user shape | implemented (T11a). `mustChangePassword` is true. `roleId` can never be `admin` (403 `permission_denied`) and must exist among the organization's roles (400 `bad_request`). 409 `username_taken` or `email_taken`. `organizationId` only for the super admin |
 | `PATCH /users/:id` | `user:write` | `{ roleId?, isActive?, name? }` (at least one field) | the user shape | planned (T11b). A target outside your organization: 404. Role change or deactivation of the organization's admin: 409 `org_admin_protected`. Changing your own role or active flag: 409 `cannot_target_self`. `roleId` admin: 403 `permission_denied`. Deactivating revokes all of the user's refresh tokens |
-| `POST /users/:id/reset-password` | `user:reset-password` | `{ temporaryPassword }` | `{ message }` | planned (T11b). Sets `mustChangePassword` and revokes all sessions. A target outside your organization: 404. The organization's admin: only the super admin (else 403 `permission_denied`). Your own account: 409 `cannot_target_self` (use `PATCH /users/me/password`) |
+| `POST /users/:id/reset-password` | `user:reset-password` | `{ temporaryPassword }` | `{ message }` | implemented (T11b). Sets `mustChangePassword` and revokes all sessions. A target outside your organization: 404. The organization's admin: only the super admin (else 403 `permission_denied`). Your own account: 409 `cannot_target_self` (use `PATCH /users/me/password`) |
 | `DELETE /users/:id` | `user:delete` (super admin) | — | `{ message }` | implemented as `/user/:id` (T4, T5) |
 | `GET/POST /roles`, `/roles/:id` | super admin | see Swagger | Role | implemented (global role CRUD) |
 | `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | { id, name, admin: { id, username, email, name } }` | One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |

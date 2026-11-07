@@ -17,12 +17,15 @@ import type { JwtUser } from '@/common/types/jwt-user.type';
 import { UserPermissionResolver } from '@/common/permissions/user-permission.resolver';
 import { OrganizationRoleRepository } from '@/common/repositories/organization-role.repository';
 import { resolveOrganizationId } from '@/common/tenant/resolve-organization-id';
+import { RefreshTokenRepository } from '@/common/repositories/refresh-token.repository';
 
 import { UserRepository } from '../../common/repositories/user.repository';
 import { EmailVerificationRepository } from './repository/email-verification.repository';
 import { RoleRepository } from '../role/repository/role.repository';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { toUserResponse } from './user.mapper';
 @Injectable()
 export class UserService {
@@ -33,6 +36,7 @@ export class UserService {
     private readonly roleRepository: RoleRepository,
     private readonly permissionResolver: UserPermissionResolver,
     private readonly organizationRoleRepository: OrganizationRoleRepository,
+    private readonly refreshTokenRepository: RefreshTokenRepository,
   ) {}
 
   findByEmail(email: string) {
@@ -219,28 +223,46 @@ export class UserService {
     }
     return this.userRepository.deleteUser(userId);
   }
-  async assignRole(targetUserId: string, roleId: string, caller: JwtUser) {
-    const targetRole = await this.roleRepository.findById(roleId);
-    if (!targetRole) {
-      throw new NotFoundException('Role not found');
-    }
-    if (targetRole.name === 'admin') {
-      throw new AppException(
-        HttpStatus.FORBIDDEN,
-        ErrorCode.PERMISSION_DENIED,
-        'The admin role is assigned only when an organization is created or by admin transfer',
-      );
-    }
-
+  // A target outside the caller's organization, or a super admin account, is
+  // 404, so existence is not revealed.
+  private async findTargetInScope(targetUserId: string, caller: JwtUser) {
     const target = await this.userRepository.findByIdWithRole(targetUserId);
-    // Outside the caller's organization: 404, so existence is not revealed.
     if (
       !target ||
+      target.isSuperAdmin ||
+      !target.organizationId ||
       (!caller.isSuperAdmin && target.organizationId !== caller.organizationId)
     ) {
       throw new NotFoundException('User not found');
     }
-    if (target.role?.name === 'admin') {
+    return target;
+  }
+
+  async updateUser(targetUserId: string, dto: UpdateUserDto, caller: JwtUser) {
+    if (
+      dto.roleId === undefined &&
+      dto.isActive === undefined &&
+      dto.name === undefined
+    ) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.BAD_REQUEST,
+        'Provide at least one of roleId, isActive, name',
+      );
+    }
+
+    const target = await this.findTargetInScope(targetUserId, caller);
+    const touchesAccess =
+      dto.roleId !== undefined || dto.isActive !== undefined;
+
+    if (touchesAccess && target.id === caller.userId) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.CANNOT_TARGET_SELF,
+        'You cannot change your own role or active status',
+      );
+    }
+    if (touchesAccess && target.role?.name === 'admin') {
       throw new AppException(
         HttpStatus.CONFLICT,
         ErrorCode.ORG_ADMIN_PROTECTED,
@@ -248,7 +270,76 @@ export class UserService {
       );
     }
 
-    return this.userRepository.updateRole(targetUserId, roleId);
+    if (dto.roleId !== undefined) {
+      const role = await this.roleRepository.findById(dto.roleId);
+      if (role?.name === 'admin') {
+        throw new AppException(
+          HttpStatus.FORBIDDEN,
+          ErrorCode.PERMISSION_DENIED,
+          'The admin role is assigned only when an organization is created or by admin transfer',
+        );
+      }
+      const organizationRole =
+        role &&
+        (await this.organizationRoleRepository.findByOrganizationAndRole(
+          target.organizationId!,
+          role.id,
+        ));
+      if (!role || !organizationRole) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.BAD_REQUEST,
+          'The role is not available in this organization',
+        );
+      }
+    }
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const updated = await this.userRepository.updateProfile(
+        target.id,
+        { roleId: dto.roleId, isActive: dto.isActive, name: dto.name },
+        tx,
+      );
+      if (dto.isActive === false) {
+        await this.refreshTokenRepository.revokeAllForUser(target.id, tx);
+      }
+      return updated;
+    });
+    return toUserResponse(user);
+  }
+
+  async resetPassword(
+    targetUserId: string,
+    dto: ResetUserPasswordDto,
+    caller: JwtUser,
+  ) {
+    const target = await this.findTargetInScope(targetUserId, caller);
+
+    if (target.id === caller.userId) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.CANNOT_TARGET_SELF,
+        'Use PATCH /users/me/password to change your own password',
+      );
+    }
+    if (target.role?.name === 'admin' && !caller.isSuperAdmin) {
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        ErrorCode.PERMISSION_DENIED,
+        "Only the super admin can reset the organization's admin password",
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.temporaryPassword, 10);
+    await this.prisma.$transaction(async (tx) => {
+      await this.userRepository.setTemporaryPassword(
+        target.id,
+        hashedPassword,
+        tx,
+      );
+      await this.refreshTokenRepository.revokeAllForUser(target.id, tx);
+    });
+    return { message: 'Password reset. The user must change it at next login' };
   }
 
   async updatePassword(

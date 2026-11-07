@@ -194,8 +194,15 @@ export class AuthService {
     }
 
     const user = await this.userService.findById(stored.userId);
-    if (!user || !user.isActive) {
+    if (!user) {
       throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (!user.isActive) {
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        ErrorCode.USER_INACTIVE,
+        'Account is deactivated',
+      );
     }
 
     const graceMs = this.configService.getOrThrow<number>('refreshGraceMs');
