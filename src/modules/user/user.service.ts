@@ -8,25 +8,31 @@ import {
 import * as bcrypt from 'bcrypt';
 import { Prisma, VerificationStatus } from '@prisma/client';
 
-import type { JwtUser } from '@/common/types/jwt-user.type';
-import { UserPermissionResolver } from '@/common/permissions/user-permission.resolver';
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { paginate } from '@/common/helpers/paginate.helper';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { AppException } from '@/common/errors/app.exception';
 import { ErrorCode } from '@/common/errors/error-codes';
+import type { JwtUser } from '@/common/types/jwt-user.type';
+import { UserPermissionResolver } from '@/common/permissions/user-permission.resolver';
+import { OrganizationRoleRepository } from '@/common/repositories/organization-role.repository';
+import { resolveOrganizationId } from '@/common/tenant/resolve-organization-id';
 
 import { UserRepository } from '../../common/repositories/user.repository';
 import { EmailVerificationRepository } from './repository/email-verification.repository';
 import { RoleRepository } from '../role/repository/role.repository';
+import { CreateUserDto } from './dto/create-user.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { toUserResponse } from './user.mapper';
 @Injectable()
 export class UserService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly userRepository: UserRepository,
     private readonly emailVerificationRepository: EmailVerificationRepository,
     private readonly roleRepository: RoleRepository,
-    private readonly prisma: PrismaService,
     private readonly permissionResolver: UserPermissionResolver,
+    private readonly organizationRoleRepository: OrganizationRoleRepository,
   ) {}
 
   findByEmail(email: string) {
@@ -46,6 +52,65 @@ export class UserService {
   }
   findById(id: string) {
     return this.userRepository.findById(id);
+  }
+  async assertUsernameAndEmailFree(username: string, email: string) {
+    if (await this.userRepository.findByUsername(username)) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.USERNAME_TAKEN,
+        'Username is already taken',
+      );
+    }
+    if (await this.userRepository.findByEmail(email)) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.EMAIL_TAKEN,
+        'Email is already taken',
+      );
+    }
+  }
+
+  async createInOrganization(dto: CreateUserDto, caller: JwtUser) {
+    const organizationId = resolveOrganizationId(caller, dto.organizationId);
+
+    const role = await this.roleRepository.findById(dto.roleId);
+    if (role?.name === 'admin') {
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        ErrorCode.PERMISSION_DENIED,
+        'The admin role is assigned only when an organization is created or by admin transfer',
+      );
+    }
+    const organizationRole =
+      role &&
+      (await this.organizationRoleRepository.findByOrganizationAndRole(
+        organizationId,
+        role.id,
+      ));
+    if (!role || !organizationRole) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.BAD_REQUEST,
+        'The role is not available in this organization',
+      );
+    }
+
+    await this.assertUsernameAndEmailFree(dto.username, dto.email);
+    const hashedPassword = await bcrypt.hash(dto.temporaryPassword, 10);
+
+    const user = await this.userRepository.createInOrganization({
+      email: dto.email,
+      username: dto.username,
+      name: dto.name,
+      hashedPassword,
+      organizationId,
+      roleId: role.id,
+      mustChangePassword: true,
+    });
+    return toUserResponse({
+      ...user,
+      role: { id: role.id, name: role.name },
+    });
   }
   async createUserWithVerification(
     email: string,
@@ -212,12 +277,15 @@ export class UserService {
   ) {
     return this.userRepository.updatePassword(userId, hashedPassword, tx);
   }
-  async listUsers(query: PaginationQueryDto) {
-    return paginate(
-      () => this.userRepository.findAll(query.skip, query.pageSize),
-      () => this.userRepository.count(),
+  async listUsers(query: ListUsersQueryDto, caller: JwtUser) {
+    const organizationId = resolveOrganizationId(caller, query.organizationId);
+    const result = await paginate(
+      () =>
+        this.userRepository.findAll(organizationId, query.skip, query.pageSize),
+      () => this.userRepository.count(organizationId),
       query.page,
       query.pageSize,
     );
+    return { items: result.items.map(toUserResponse), meta: result.meta };
   }
 }

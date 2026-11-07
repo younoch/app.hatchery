@@ -29,7 +29,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T9 | `prisma/seed.ts`: global roles + super admin from `SEED_SUPER_ADMIN_USERNAME`, `SEED_SUPER_ADMIN_EMAIL`, `SEED_SUPER_ADMIN_PASSWORD` | Done | T7, T8 |
 | T10a | `Organization`, `OrganizationRole`, `User.organizationId` (migration, dev DB reset); `resolveOrganizationId`; resolver switches to `OrganizationRole`; `GET /users/me` returns the real `organizationId` | done | T8, T9 |
 | T10b | `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; `assignRole` can no longer assign `admin` and rejects targets outside the caller's organization; `deleteUser` refuses the organization's admin | done | T10a |
-| T11a | `GET /users` scoped to one organization; `POST /users` (temporary password, `mustChangePassword`); one user response shape; a shared username and email availability check | not started | T10b |
+| T11a | `GET /users` scoped to one organization; `POST /users` (temporary password, `mustChangePassword`); one user response shape; a shared username and email availability check | done | T10b |
 | T11b | `PATCH /users/:id` (role, active, name); `POST /users/:id/reset-password`; deactivation revokes sessions; the temporary `PATCH /users/:id/role` is removed | not started | T11a |
 | T12 | `GET/PATCH /organization-roles` | not started | T10b |
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |

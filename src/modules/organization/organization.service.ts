@@ -15,6 +15,7 @@ import { RoleRepository } from '../role/repository/role.repository';
 import { OrganizationRepository } from './repository/organization.repository';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { TransferAdminDto } from './dto/transfer-admin.dto';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class OrganizationService {
@@ -24,6 +25,7 @@ export class OrganizationService {
     private readonly organizationRoleRepository: OrganizationRoleRepository,
     private readonly userRepository: UserRepository,
     private readonly roleRepository: RoleRepository,
+    private readonly userService: UserService,
   ) {}
 
   async create(dto: CreateOrganizationDto) {
@@ -34,20 +36,7 @@ export class OrganizationService {
     }
 
     const { username, email, name, temporaryPassword } = dto.admin;
-    if (await this.userRepository.findByUsername(username)) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.USERNAME_TAKEN,
-        'Username is already taken',
-      );
-    }
-    if (await this.userRepository.findByEmail(email)) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.EMAIL_TAKEN,
-        'Email is already taken',
-      );
-    }
+    await this.userService.assertUsernameAndEmailFree(username, email);
 
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
