@@ -53,10 +53,10 @@ The permissions a role has inside one organization.
 | id | String | yes | uuid() | Primary key |
 | organizationId | String | yes | - | FK to Organization |
 | roleId | String | yes | - | FK to Role |
-| permissions | String[] | yes | - | Org-level keys only. Copied from `Role.permissions` at organization creation. The `admin` row is not editable by the org admin |
+| permissions | String[] | yes | - | Org-level keys only. Copied from `Role.permissions` at organization creation, then edited by the org admin. The `admin` row is created with the rest but never read: the `admin` role always gets every org key in the resolver |
 
 Unique: `[organizationId, roleId]`.
-A user's effective permissions are the row matching `(user.organizationId, user.roleId)`.
+A user's effective permissions are the row matching `(user.organizationId, user.roleId)` (the `admin` role is the exception: every org key).
 
 ### Tank
 PLANNED (T14).

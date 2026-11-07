@@ -31,12 +31,12 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T10b | `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; `assignRole` can no longer assign `admin` and rejects targets outside the caller's organization; `deleteUser` refuses the organization's admin | done | T10a |
 | T11a | `GET /users` scoped to one organization; `POST /users` (temporary password, `mustChangePassword`); one user response shape; a shared username and email availability check | done | T10b |
 | T11b | `PATCH /users/:id` (role, active, name); `POST /users/:id/reset-password`; deactivation revokes sessions; the temporary `PATCH /users/:id/role` is removed | done | T11a |
-| T12 | `GET/PATCH /organization-roles` | not started | T10b |
+| T12 | `GET/PATCH /organization-roles`; the `admin` role gets every org key in the resolver; remove the `organization-role:read` key (map, templates, seed) | not started | T10b |
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10a |
 | T15 | `Reading` model; `POST /readings/sync` | not started | T6, T14 |
 | T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | done | T8 (best before T15) |
-| T17 | Structured admin-action log lines | not started | T10b, T11b |
+| T17 | Structured admin-action log lines (including the user's own password change); required before the pilot goes live | not started | T10b, T11b |
 
 ## API contract
 
@@ -60,8 +60,8 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | \{ id, name, admin: { id, username, email, name } }` | One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |
 | `GET /organizations` | `organization:read` | `page, pageSize` | `{ items: [{ id, name }], meta }` | |
 | `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | 404 for an unknown organization or a user outside it; 409 `conflict` if the new admin is inactive; 400 `bad_request` if the user is already the admin or `previousAdminRoleId` is the admin role |
-| `GET /organization-roles` | `organization-role:read` | `organizationId` (super admin) | `[{ id, roleId, name, permissions, editable }]` | planned (T12) |
-| `PATCH /organization-roles/:id` | `organization-role:write` | `{ permissions }` (org-level keys only; `admin` row rejected) | the row | planned (T12) |
+| `GET /organization-roles` | any organization member (no key) | `organizationId` (super admin; required) | `[{ id, roleId, name, permissions, editable }]`, not paginated. The `admin` entry lists every org key and has `editable: false`. Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | planned (T12) |
+| `PATCH /organization-roles/:id` | `organization-role:write` | `{ permissions }` (the full new list; org-level keys only; duplicates ignored) | the row, same shape as a list item | planned (T12). A row of another organization: 404. The `admin` row: 403 `permission_denied`. Adding a key the caller does not hold: 403 `permission_denied` (removing is allowed). A platform or unknown key: 400 `validation_failed` with `field: permissions`, `code: not_allowed`. Effective on the next request; the client sees it at its next `GET /users/me` |
 | `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; not paginated). Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | planned (T14) |
 | `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name }`; `{ name?, isActive? }` | tank | planned (T14) |
 | `POST /readings/sync` | `reading:create` | see below | see below | planned (T15) |
@@ -133,7 +133,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | `session_revoked` | 401 | the session ended: another device logged in, a refresh token was reused, or the password changed |
 | `unauthorized` | 401 | missing or invalid token |
 | `must_change_password` | 403 | change the temporary password first |
-| `permission_denied` | 403 | missing permission |
+|  `permission_denied` | 403 | missing permission, or an action the caller may not perform (granting a key you do not hold, editing the `admin` row) |
 | `no_organization` | 403 | user has no organization |
 | `organization_mismatch` | 403 | asked for another organization |
 | `org_admin_protected` | 409 | action not allowed on the organization's admin (deactivate, delete, role change) |
@@ -172,6 +172,9 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-06: Admin transfer locks the organization row (`SELECT ... FOR UPDATE`) so two transfers cannot leave two admins. `PATCH /users/:id/role` stays until T11 replaces it with `PATCH /users/:id`; until then it can never assign `admin`, never touches the organization's admin, and answers 404 for a target outside the caller's organization.
 * 2026-11-06: T11 is delivered in two commits (T11a list and create, T11b change and reset). A user cannot change their own role or active flag through `PATCH /users/:id` (409 `cannot_target_self`), so `user:write` is never a self-escalation path. Super admin accounts are never targets of `/users/:id` routes (404).
 * 2026-11-07: `POST /auth/refresh` answers 401 `user_inactive` (not the generic 401) when the user was deactivated, the same code as login and the per-request check, so the frontend handles one case. Deactivation revokes every refresh token of the user; the per-request `isActive` check already stops the access token at once.
+* 2026-11-07: Role permissions stay per organization and are edited by the org admin (`OrganizationRole`). Global-only permissions (one place, edited by the super admin) were considered and dropped: the per-organization model is already built, and hatcheries may need different permissions.
+* 2026-11-07: Nobody can grant a key they do not hold (removing is allowed). The `admin` role always has every org key in the resolver (its row is never read), so a new key reaches existing organizations without a data migration. `GET /organization-roles` is readable by any organization member, so the `organization-role:read` key is removed; the create-user form needs the list.
+* 2026-11-07: Users leave an organization by deactivation; hard delete stays super-admin only (reaffirms 2026-10-17). Admin-driven password reset stays for now. Accountability comes from the admin-action log: the reset and the user's own password change are logged with the actor, and T17 is required before the pilot goes live.
 
 
 ## Open decisions
@@ -206,3 +209,6 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * Unit and e2e specs are stale after the refactors (`pnpm test` fails); update or rewrite them before the first release
 * Move the Prisma seed config from package.json#prisma to prisma.config.ts before upgrading to Prisma 7
 * The username rule (`/^[a-z0-9._-]{3,30}$/`) went away with `RegisterDto`. Re-create it in `CreateUserDto` (T11).
+* Admin-driven password reset: an admin can take over an account (set a temporary password, then change it). The log makes this traceable, not impossible. Revisit, together with the super admin being the only recovery path for a forgotten admin password (kept for now, decided 2026-11-07)
+* Durable `AuditLog` table (tamper-evident, with retention) for the admin-action log: before the first real hatchery
+* A reading's `createdById` identifies an account, not a person (shared or reset accounts)

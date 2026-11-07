@@ -33,7 +33,7 @@ Each fact lives in one file: rules here, schema in `database.md`, tasks/contract
 * **Organization** = one hatchery (a tenant). A user belongs to exactly one organization. The same person in two hatcheries needs two accounts (`username` and `email` are globally unique).
 * **Super admin** — the platform owner. DB-only flag, no organization, can act in any organization. Creates organizations and gives each one an admin.
 * **Org admin** — exactly one per organization, never zero. Adds users, resets passwords, deactivates users, manages tanks, and decides what each role may do in their organization.
-* **Roles** — a global list (`admin`, `manager`, `staff`, seeded). What a role may do is per organization (`OrganizationRole`, copied from the global role when the organization is created).
+* **Roles** — a global list (`admin`, `manager`, `staff`, seeded). What a role may do is per organization (`OrganizationRole`, copied from the global role when the organization is created, then edited by the org admin). The `admin` role always has every org-level key.
 * **Tank** — belongs to an organization. Deactivated, never deleted.
 * **Reading** — one water-quality measurement (pH, temperature, salinity, oxygen) for a tank. Created on phones, often offline, synced later. Immutable in the pilot.
 * "Phone = staff, desktop = admin" is only a design lens for the frontend. Access control is RBAC.
@@ -105,18 +105,19 @@ Naming: `{feature}.controller.ts`, `{feature}.service.ts`, `{entity}.repository.
 | `user` | delete | platform (super admin only) |
 | `organization` | create, read, transfer-admin | platform |
 | `role` | create, read, write, delete | platform |
-| `organization-role` | read, write | org |
+| `organization-role` | write | org |
 | `tank` | create, write | org |
 | `reading` | create, read-all | org |
 
 * `GET /tanks` needs no key: any member of the organization can list its tanks.
+* `GET /organization-roles` needs no key either: any member can read the roles of their organization (the create-user form needs the list).
 * `reading:create` covers creating readings and seeing your own. `reading:read-all` is organization-wide viewing.
 
 Default templates (global `Role.permissions`, seeded; copied into each organization's `OrganizationRole` rows when it is created):
 
 | role | permissions |
 |---|---|
-| `admin` | `user:create`, `user:read`, `user:write`, `user:reset-password`, `organization-role:read`, `organization-role:write`, `tank:create`, `tank:write`, `reading:create`, `reading:read-all` |
+| `admin` | every org-level key (the resolver grants them regardless of the row, see Effective permissions) |
 | `manager` | `user:read`, `tank:create`, `tank:write`, `reading:create`, `reading:read-all` |
 | `staff` | `reading:create` |
 
@@ -125,14 +126,15 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 `UserPermissionResolver` is the single abstraction used by `PermissionsGuard` and `GET /users/me`.
 
 * Super admin: every key (bypass handled inside the resolver).
+* Role `admin`: every org-level key (`ORG_PERMISSIONS`), so a key added later reaches existing organizations without a data migration. The `admin` row is never read.
 * Everyone else: `OrganizationRole(user.organizationId, user.roleId).permissions`. A user without an organization or role has none.
 
 ### Who may grant what
 
-* Role management (`/roles`) is platform-level: super admin only.
-* The org admin edits only the `permissions` of the organization's own `OrganizationRole` rows, and only with org-level keys. The `admin` role's row is not editable.
-* The org admin cannot create roles and cannot grant platform keys, so privilege escalation through role editing is closed by design.
-
+* Role management (`/roles`) is platform-level: super admin only. It edits the templates, which affect only organizations created afterwards (copy-on-create).
+* Whoever holds `organization-role:write` (by default the org admin) edits only the `permissions` of their own organization's `OrganizationRole` rows, only with org-level keys. The `admin` row is not editable.
+* **Nobody can grant a key they do not hold.** Adding a key the caller lacks → 403 `permission_denied`. Removing keys is allowed: the admin trusts whoever receives `organization-role:write`. The super admin holds every key.
+* Nobody can create roles or grant platform keys, so privilege escalation through role editing is closed by design.
 ### Super admin
 
 * `User.isSuperAdmin` is a DB-only boolean, not a role. It cannot be set through the API.
@@ -163,7 +165,7 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 * **Passwords.** The admin creates users with a temporary password and `mustChangePassword = true`. Admin-driven reset (`user:reset-password`, default only the `admin` role) sets a temporary password, `mustChangePassword = true`, and revokes all sessions. Only the super admin can reset an organization's admin. A password change clears `mustChangePassword`, revokes all of the user's existing refresh tokens, and returns a fresh access token plus refresh cookie (the cookie Path is `/auth/refresh`, so this endpoint cannot tell which token is the current one).
 * **Usernames.** Chosen by the admin, never changed by the user. Lowercase `a-z 0-9 . _ -`, 3–30 characters, globally unique, normalized to lowercase before lookup.
 * **Own account.** A user cannot delete or deactivate their own account.
-* **Admin-action log.** Each of these writes one structured pino line `{ action, actorId, organizationId, targetId }`: organization create, user create, role change, deactivate/activate, password reset, admin transfer, organization-role update (planned, T17; no new table yet).
+* **Admin-action log.** Each of these writes one structured pino line `{ action, actorId, organizationId, targetId }`: organization create, user create, role change, deactivate/activate, password reset, the user's own password change, admin transfer, organization-role update. Planned (T17) and required before the pilot goes live; a durable `AuditLog` table is in the parking lot (`progress.md`).
 
 ## Auth
 
