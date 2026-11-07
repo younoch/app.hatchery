@@ -19,6 +19,7 @@ import { BullmqModule } from '@/common/bullmq/bullmq.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { UserModule } from '@/modules/user/user.module';
 import { OrganizationModule } from '@/modules/organization/organization.module';
+import { OrganizationRoleModule } from '@/modules/organization-role/organization-role.module';
 import { HealthModule } from '@/modules/health/health.module';
 
 @Module({
@@ -86,6 +87,7 @@ import { HealthModule } from '@/modules/health/health.module';
     AuthModule,
     UserModule,
     OrganizationModule,
+    OrganizationRoleModule,
   ],
   providers: [
     {
