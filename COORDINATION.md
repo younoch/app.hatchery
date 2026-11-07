@@ -2,7 +2,7 @@
 
 Temporary working file. It is **identical in both repos** (`hatchery-backend`, `hatchery-frontend`) and is deleted when the project ends.
 
-It records what each side asks of the other (requests and demands), what it recommends, questions, and announcements, with a status. It is **not** the API contract: the contract lives in the backend progress.md` (Swagger has no response schemas, see B→F-12).` `progress.md` and the Swagger JSON (`/api-json`). Link to them; do not copy field lists here.
+It records what each side asks of the other (requests and demands), what it recommends, questions, and announcements, with a status. It is **not** the API contract: the contract lives in the backend `progress.md` (Swagger has no response schemas, see B→F-12) and in the Swagger JSON (`/api-json`). Link to them; do not copy field lists here.
 
 ## Rules
 
