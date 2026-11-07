@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UserRepository } from '@/common/repositories/user.repository';
 import { OrganizationRoleRepository } from '@/common/repositories/organization-role.repository';
-import { PERMISSIONS } from '@/common/permissions/permission.constants';
+import { PERMISSIONS, ORG_PERMISSIONS } from '@/common/permissions/permission.constants';
 
 @Injectable()
 export class UserPermissionResolver {
@@ -11,10 +11,11 @@ export class UserPermissionResolver {
   ) {}
 
   async getPermissions(userId: string): Promise<string[]> {
-    const user = await this.userRepository.findById(userId);
+    const user = await this.userRepository.findByIdWithRoleName(userId);
     if (!user) return [];
     if (user.isSuperAdmin) return [...PERMISSIONS];
     if (!user.organizationId || !user.roleId) return [];
+    if (user.role?.name === 'admin') return [...ORG_PERMISSIONS];
 
     const row = await this.organizationRoleRepository.findByOrganizationAndRole(
       user.organizationId,

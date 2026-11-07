@@ -11,7 +11,6 @@ const ROLE_TEMPLATES: Record<string, string[]> = {
     'user:read',
     'user:write',
     'user:reset-password',
-    'organization-role:read',
     'organization-role:write',
     'tank:create',
     'tank:write',

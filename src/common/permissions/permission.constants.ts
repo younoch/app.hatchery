@@ -22,7 +22,7 @@ export const PERMISSION_MAP = {
     write: 'platform',
     delete: 'platform',
   },
-  'organization-role': { read: 'org', write: 'org' },
+  'organization-role': { write: 'org' },
   tank: { create: 'org', write: 'org' },
   reading: { create: 'org', 'read-all': 'org' },
 } as const satisfies Record<string, Record<string, Scope>>;

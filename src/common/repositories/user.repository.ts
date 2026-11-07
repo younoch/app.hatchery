@@ -35,6 +35,15 @@ export class UserRepository {
     });
   }
 
+  findByIdWithRoleName(id: string, tx?: Prisma.TransactionClient) {
+    const client = tx ?? this.prisma;
+    return client.user.findUnique({
+      where: { id },
+      omit: { password: true },
+      include: { role: { select: { name: true } } },
+    });
+  }
+
   findByUsername(username: string, tx?: Prisma.TransactionClient) {
     const client = tx ?? this.prisma;
     return client.user.findUnique({
