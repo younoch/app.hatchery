@@ -18,7 +18,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     info: unknown,
     context: ExecutionContext,
   ): TUser {
-    const authenticated = super.handleRequest(err, user, info, context);
+    const authenticated = super.handleRequest<JwtUser>(
+      err,
+      user,
+      info,
+      context,
+    );
 
     const allowed = this.reflector.getAllAndOverride<boolean>(
       ALLOW_MUST_CHANGE_PASSWORD,

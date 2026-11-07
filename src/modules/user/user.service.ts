@@ -10,7 +10,6 @@ import { Prisma, VerificationStatus } from '@prisma/client';
 
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { paginate } from '@/common/helpers/paginate.helper';
-import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { AppException } from '@/common/errors/app.exception';
 import { ErrorCode } from '@/common/errors/error-codes';
 import type { JwtUser } from '@/common/types/jwt-user.type';
