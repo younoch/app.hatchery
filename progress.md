@@ -55,9 +55,9 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | the user shape | implemented (T11a). `mustChangePassword` is true. `roleId` can never be `admin` (403 `permission_denied`) and must exist among the organization's roles (400 `bad_request`). 409 `username_taken` or `email_taken`. `organizationId` only for the super admin |
 | `PATCH /users/:id` | `user:write` | `{ roleId?, isActive?, name? }` (at least one field) | the user shape | implemented (T11b). A target outside your organization (or a super admin account): 404. Role change or deactivation of the organization's admin: 409 `org_admin_protected`. Changing your own role or active flag: 409 `cannot_target_self`. `roleId` admin: 403 `permission_denied`. Deactivating revokes all of the user's refresh tokens |
 | `POST /users/:id/reset-password` | `user:reset-password` | `{ temporaryPassword }` | `{ message }` | implemented (T11b). Sets `mustChangePassword` and revokes all sessions. A target outside your organization: 404. The organization's admin: only the super admin (else 403 `permission_denied`). Your own account: 409 `cannot_target_self` (use `PATCH /users/me/password`) |
-| `DELETE /users/:id` | `user:delete` (super admin) | — | `{ message }` | implemented as `/user/:id` (T4, T5) |
+| `DELETE /users/:id` | `user:delete` (super admin) | — | `{ message }` | implemented (T4, T5). Super admin only. 404 for an unknown user; 409 \cannot_target_self`; 409 `org_admin_protected` for an organization’s admin |`
 | `GET/POST /roles`, `/roles/:id` | super admin | see Swagger | Role | implemented (global role CRUD) |
-| `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | { id, name, admin: { id, username, email, name } }` | One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |
+| `POST /organizations` | `organization:create` | `{ name, admin: { username, email, name?, temporaryPassword } }` | \{ id, name, admin: { id, username, email, name } }` | One transaction: organization, `OrganizationRole` rows copied from the global roles, the admin user (`admin` role, `mustChangePassword`) |
 | `GET /organizations` | `organization:read` | `page, pageSize` | `{ items: [{ id, name }], meta }` | |
 | `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | 404 for an unknown organization or a user outside it; 409 `conflict` if the new admin is inactive; 400 `bad_request` if the user is already the admin or `previousAdminRoleId` is the admin role |
 | `GET /organization-roles` | `organization-role:read` | `organizationId` (super admin) | `[{ id, roleId, name, permissions, editable }]` | planned (T12) |
@@ -137,7 +137,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | `no_organization` | 403 | user has no organization |
 | `organization_mismatch` | 403 | asked for another organization |
 | `org_admin_protected` | 409 | action not allowed on the organization's admin (deactivate, delete, role change) |
-| `cannot_target_self` | 409 | cannot delete or deactivate yourself |
+| `cannot_target_self` | 409 | cannot delete, deactivate, change the role of, or reset the password of yourself |
 | `username_taken`, `email_taken`, `conflict` | 409 | uniqueness or foreign-key conflict |
 | `not_found`, `tank_not_found` | 404 | missing or outside your organization |
 | `id_conflict`, `recorded_at_in_future` | item level (sync) | see Readings sync |
@@ -147,8 +147,6 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | `payload_too_large` | 413 | request body over 100 KB |
 | `bad_request` | 400 | generic bad request without a specific code (default for plain 400) |
 | `internal_error` | 500 | unexpected server error |
-| `username_taken` | 409 | the username already exists |
-| `email_taken` | 409 | the email already exists |
 
 ## Decisions log
 
