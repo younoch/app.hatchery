@@ -30,7 +30,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T10a | `Organization`, `OrganizationRole`, `User.organizationId` (migration, dev DB reset); `resolveOrganizationId`; resolver switches to `OrganizationRole`; `GET /users/me` returns the real `organizationId` | done | T8, T9 |
 | T10b | `POST/GET /organizations`; `POST /organizations/:id/transfer-admin`; `assignRole` can no longer assign `admin` and rejects targets outside the caller's organization; `deleteUser` refuses the organization's admin | done | T10a |
 | T11a | `GET /users` scoped to one organization; `POST /users` (temporary password, `mustChangePassword`); one user response shape; a shared username and email availability check | done | T10b |
-| T11b | `PATCH /users/:id` (role, active, name); `POST /users/:id/reset-password`; deactivation revokes sessions; the temporary `PATCH /users/:id/role` is removed | not started | T11a |
+| T11b | `PATCH /users/:id` (role, active, name); `POST /users/:id/reset-password`; deactivation revokes sessions; the temporary `PATCH /users/:id/role` is removed | in progress | T11a |
 | T12 | `GET/PATCH /organization-roles` | not started | T10b |
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10a |
@@ -45,14 +45,14 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | endpoint | auth / permission | request | `data` | status |
 |---|---|---|---|---|
 | `POST /auth/login` | none | `{ username, password }` | `{ access_token }` + cookie `refresh_token` (httpOnly, Path `/auth/refresh`, 14 days) | implemented; answers 200 |
-| `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; answers 200; rotation, grace window and single session (T16) |
+| `POST /auth/refresh` | cookie | — | `{ access_token }` + new cookie | implemented; answers 200; rotation, grace window and single session (T16); 401 \user_inactive` for a deactivated user (T11b)` |
 | `POST /auth/refresh/logout` | cookie | — | `{ message }`, cookie cleared | implemented |
 | `POST /auth/logout` | cookie | — | `{ message }` | implemented but unusable from a browser (wrong cookie Path); see parking lot |
 | `GET /auth/verify-email`, `POST /auth/forgot-password`, `POST /auth/reset-password` | none | token / email / `{ token, newPassword }` | `{ message }` | implemented; 503 `email_disabled` when `EMAIL_ENABLED=false` |
 | `GET /users/me` | Bearer | — | `{ id, email, username, name, isSuperAdmin, organizationId, permissions (always an array, never missing), mustChangePassword, role: { name } \| null }` | implemented (T4, T8). `organizationId` is `null` for the super admin |
 | `PATCH /users/me/password` | Bearer | `{ currentPassword, newPassword }` | `{ message, access_token }` + new `refresh_token` cookie | implemented (T16): clears `mustChangePassword`, revokes all older refresh tokens and issues a fresh pair (the cookie Path means the endpoint cannot tell which token is the current one) |
-| `GET /users` | `user:read` | `page, pageSize, organizationId` (required for the super admin; a normal caller may only name their own) | `{ items, meta }`; each item is the user shape below | planned (T11a). Always one organization, newest first. 400 `organization_required`, 403 `no_organization` or `organization_mismatch` |
-| `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | the user shape | planned (T11a). `mustChangePassword` is true. `roleId` can never be `admin` (403 `permission_denied`) and must exist among the organization's roles (400 `bad_request`). 409 `username_taken` or `email_taken`. `organizationId` only for the super admin |
+| `GET /users` | `user:read` | `page, pageSize, organizationId` (required for the super admin; a normal caller may only name their own) | `{ items, meta }`; each item is the user shape below | implemented (T11a). Always one organization, newest first. 400 `organization_required`, 403 `no_organization` or `organization_mismatch` |
+| `POST /users` | `user:create` | `{ username, email, name?, roleId, temporaryPassword, organizationId? }` | the user shape | implemented (T11a). `mustChangePassword` is true. `roleId` can never be `admin` (403 `permission_denied`) and must exist among the organization's roles (400 `bad_request`). 409 `username_taken` or `email_taken`. `organizationId` only for the super admin |
 | `PATCH /users/:id` | `user:write` | `{ roleId?, isActive?, name? }` (at least one field) | the user shape | planned (T11b). A target outside your organization: 404. Role change or deactivation of the organization's admin: 409 `org_admin_protected`. Changing your own role or active flag: 409 `cannot_target_self`. `roleId` admin: 403 `permission_denied`. Deactivating revokes all of the user's refresh tokens |
 | `POST /users/:id/reset-password` | `user:reset-password` | `{ temporaryPassword }` | `{ message }` | planned (T11b). Sets `mustChangePassword` and revokes all sessions. A target outside your organization: 404. The organization's admin: only the super admin (else 403 `permission_denied`). Your own account: 409 `cannot_target_self` (use `PATCH /users/me/password`) |
 | `DELETE /users/:id` | `user:delete` (super admin) | — | `{ message }` | implemented as `/user/:id` (T4, T5) |
@@ -173,6 +173,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-06: The frontend starts its backend integration after T10 and T11 (auth, organizations and user management together). The `COORDINATION.md` go-signal (B→F-25) and the frontend repo sync happen then. T10 is delivered in two commits: T10a (schema, resolver, helper) and T10b (organization endpoints and admin rules).
 * 2026-11-06: Admin transfer locks the organization row (`SELECT ... FOR UPDATE`) so two transfers cannot leave two admins. `PATCH /users/:id/role` stays until T11 replaces it with `PATCH /users/:id`; until then it can never assign `admin`, never touches the organization's admin, and answers 404 for a target outside the caller's organization.
 * 2026-11-06: T11 is delivered in two commits (T11a list and create, T11b change and reset). A user cannot change their own role or active flag through `PATCH /users/:id` (409 `cannot_target_self`), so `user:write` is never a self-escalation path. Super admin accounts are never targets of `/users/:id` routes (404).
+* 2026-11-07: `POST /auth/refresh` answers 401 `user_inactive` (not the generic 401) when the user was deactivated, the same code as login and the per-request check, so the frontend handles one case. Deactivation revokes every refresh token of the user; the per-request `isActive` check already stops the access token at once.
 
 
 ## Open decisions
