@@ -90,6 +90,13 @@ Feature modules normally contain `controller/`, `service/`, `repository/`, `dto/
 
 Naming: `{feature}.controller.ts`, `{feature}.service.ts`, `{entity}.repository.ts`, `{purpose}.dto.ts`, `{feature}.module.ts`.
 
+### API documentation (Swagger)
+
+* Every endpoint declares what it returns: `@ApiEnvelope(Dto)`, `@ApiEnvelope(Dto, { isArray: true })` or `@ApiPaginatedEnvelope(Dto)` from `common/swagger/api-envelope.ts`. They describe `Dto` inside the `{ success, statusCode, data, timestamp }` envelope. The default status is 200; pass `{ status: 201 }` for creates.
+* Response shapes are classes named `*ResponseDto` (in the module's `dto/` folder) with `@ApiProperty`. Mappers and services are typed with them (`toTankResponse(...): TankResponseDto`), so the build fails when the code and the documented shape drift apart.
+* Each controller has `@ApiTags(...)` and one `@ApiErrors(...)` (the error envelope, `ErrorResponseDto`; the code list is in `progress.md`).
+* The contract stays in `progress.md`; `/api-json` must say the same. A change to a response shape updates both in the same commit.
+
 ### Repository pattern
 
 * Services never call Prisma directly; database access goes through repositories.
