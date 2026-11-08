@@ -62,6 +62,7 @@ src/
 ├── common/
 │   ├── repositories/   (shared repositories, e.g. UserRepository)
 │   ├── permissions/
+│   ├── audit/          (AdminActionLogger: the admin-action log lines)
 │   ├── guards/
 │   ├── decorators/
 │   ├── filters/
@@ -169,7 +170,7 @@ Default templates (global `Role.permissions`, seeded; copied into each organizat
 * **Usernames.** Chosen by the admin, never changed by the user. Lowercase `a-z 0-9 . _ -`, 3–30 characters, globally unique, normalized to lowercase before lookup.
 * **Tanks.** The name is trimmed, 1–50 characters, unique within the organization ignoring case (409 `tank_name_taken`). Tanks are deactivated, never deleted; an inactive tank can still be renamed and still accepts readings. Any member lists the organization's tanks (ordered by name); `tank:create` and `tank:write` change them. A tank of another organization is 404 `tank_not_found`.
 * **Own account.** A user cannot delete or deactivate their own account.
-* **Admin-action log.** Every successful admin action writes one structured pino line (`msg: "admin_action"`) with `{ action, actorId, organizationId, targetId, details }` through `AdminActionLogger` (`common/audit/`), after the change is saved. Failed attempts (403, 404, 409, validation) are not logged. `details` says what changed and never carries a password, hash or token. Planned (T17) and required before the pilot goes live; a durable `AuditLog` table is in the parking lot (`progress.md`).
+* **Admin-action log.** Every successful admin action writes one structured pino line (`msg: "admin_action"`) with `{ action, actorId, organizationId, targetId, details }` through `AdminActionLogger` (`common/audit/`), after the change is saved. Failed attempts (403, 404, 409, validation) and changes that change nothing (the same tank name, the same permission list) are not logged. `details` says what changed and never carries a password, hash or token. Implemented in T17; a durable `AuditLog` table is in the parking lot (`progress.md`).
   * `organization.create` (target: the organization; details `{ name, adminId }`), `organization.transfer_admin` (target: the new admin; details `{ previousAdminId, previousAdminRoleId }`).
   * `user.create` (details `{ roleId }`), `user.role_change` (details `{ from, to }`, role ids), `user.deactivate`, `user.activate`, `user.reset_password`, `user.delete` (super admin; details `{ username }`).
   * `user.password_change`: the user's own change; actor and target are the same account; no details.
