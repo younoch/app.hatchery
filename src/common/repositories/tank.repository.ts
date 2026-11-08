@@ -13,6 +13,10 @@ export class TankRepository {
     });
   }
 
+  findManyByIds(ids: string[]) {
+    return this.prisma.tank.findMany({ where: { id: { in: ids } } });
+  }
+
   findById(id: string, tx?: Prisma.TransactionClient) {
     const client = tx ?? this.prisma;
     return client.tank.findUnique({ where: { id } });
@@ -32,11 +36,7 @@ export class TankRepository {
     });
   }
 
-  create(
-    organizationId: string,
-    name: string,
-    tx?: Prisma.TransactionClient,
-  ) {
+  create(organizationId: string, name: string, tx?: Prisma.TransactionClient) {
     const client = tx ?? this.prisma;
     return client.tank.create({ data: { organizationId, name } });
   }

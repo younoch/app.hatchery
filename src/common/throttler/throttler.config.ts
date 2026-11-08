@@ -6,10 +6,12 @@ import { Request } from 'express';
 const MINUTE = 60_000;
 const LOGIN_PATH = '/auth/login';
 const REFRESH_PATH = '/auth/refresh';
+const SYNC_PATH = '/readings/sync';
 const MAX_NAME_LENGTH = 64;
 
 export const THROTTLER = {
   USER: 'user',
+  SYNC: 'sync',
   IP: 'ip',
   LOGIN_USER: 'login-user',
   LOGIN_IP: 'login-ip',
@@ -71,6 +73,15 @@ export function createThrottlerOptions(
         ttl: MINUTE,
         limit: 120,
         skipIf: (context) => !getUserId(getRequest(context)),
+        getTracker: (req) => getUserId(req as Request) ?? ip(req as Request),
+        generateKey,
+      },
+      {
+        name: THROTTLER.SYNC,
+        ttl: MINUTE,
+        limit: 30,
+        skipIf: (context) =>
+          !getUserId(getRequest(context)) || !isPath(context, SYNC_PATH),
         getTracker: (req) => getUserId(req as Request) ?? ip(req as Request),
         generateKey,
       },

@@ -69,7 +69,7 @@ A user's effective permissions are the row matching `(user.organizationId, user.
 Unique: `[organizationId, name]` (it also serves lookups by organization, so there is no separate index). The foreign key to Organization is `Restrict`.
 
 ### Reading
-PLANNED (T15). Immutable in the pilot.
+Immutable in the pilot.
 | field | type | required | default | notes |
 |---|---|---|---|---|
 | id | String | yes | - | Client UUID = primary key = idempotency key |

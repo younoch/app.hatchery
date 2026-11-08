@@ -21,6 +21,7 @@ model User {
   emailVerifications EmailVerification[]
   passwordResetTokens PasswordResetToken[]
   refreshTokens RefreshToken[]
+  readings      Reading[]
   isSuperAdmin  Boolean  @default(false)
   roleId String?
   role   Role?   @relation(fields: [roleId], references: [id])
@@ -52,6 +53,7 @@ model Tank {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   name           String
   isActive       Boolean      @default(true)
+  readings       Reading[]
 
   @@unique([organizationId, name])
 }
@@ -103,6 +105,23 @@ model RefreshToken {
 
   @@index([userId])
   @@index([familyId])
+}
+
+model Reading {
+  id           String   @id
+  tankId       String
+  tank         Tank     @relation(fields: [tankId], references: [id], onDelete: Restrict)
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  ph           Float
+  temperatureC Float
+  salinityPpt  Float
+  oxygenMgL    Float
+  note         String?
+  recordedAt   DateTime
+  syncedAt     DateTime @default(now())
+
+  @@index([createdById, tankId, recordedAt])
 }
 
 enum VerificationStatus {

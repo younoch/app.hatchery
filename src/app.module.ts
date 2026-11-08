@@ -21,6 +21,7 @@ import { UserModule } from '@/modules/user/user.module';
 import { OrganizationModule } from '@/modules/organization/organization.module';
 import { OrganizationRoleModule } from '@/modules/organization-role/organization-role.module';
 import { TankModule } from '@/modules/tank/tank.module';
+import { ReadingModule } from '@/modules/reading/reading.module';
 import { HealthModule } from '@/modules/health/health.module';
 
 @Module({
@@ -90,6 +91,7 @@ import { HealthModule } from '@/modules/health/health.module';
     OrganizationModule,
     OrganizationRoleModule,
     TankModule,
+    ReadingModule,
   ],
   providers: [
     {

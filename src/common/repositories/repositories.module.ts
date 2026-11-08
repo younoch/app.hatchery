@@ -5,6 +5,7 @@ import { PasswordResetTokenRepository } from './password-reset-token.repository'
 import { RefreshTokenRepository } from './refresh-token.repository';
 import { OrganizationRoleRepository } from './organization-role.repository';
 import { TankRepository } from './tank.repository';
+import { ReadingRepository } from './reading.repository';
 
 @Module({
   imports: [PrismaModule],
@@ -14,6 +15,7 @@ import { TankRepository } from './tank.repository';
     RefreshTokenRepository,
     OrganizationRoleRepository,
     TankRepository,
+    ReadingRepository,
   ],
   exports: [
     UserRepository,
@@ -21,6 +23,7 @@ import { TankRepository } from './tank.repository';
     RefreshTokenRepository,
     OrganizationRoleRepository,
     TankRepository,
+    ReadingRepository,
   ],
 })
 export class RepositoriesModule {}

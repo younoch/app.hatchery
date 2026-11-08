@@ -45,6 +45,14 @@ function toFieldError(
     case 'isArray':
     case 'isEnum':
       return { field, code: ErrorCode.INVALID_TYPE };
+    case 'arrayMinSize':
+      return { field, code: ErrorCode.TOO_SHORT, params: { min: n } };
+    case 'arrayMaxSize':
+      return { field, code: ErrorCode.TOO_LONG, params: { max: n } };
+    case 'arrayMinSize':
+      return { field, code: ErrorCode.TOO_SHORT, params: { min: n } };
+    case 'arrayMaxSize':
+      return { field, code: ErrorCode.TOO_LONG, params: { max: n } };
     case 'isIn':
       return { field, code: ErrorCode.NOT_ALLOWED };
     case 'matches':
@@ -81,6 +89,10 @@ function dedupe(errors: FieldError[]): FieldError[] {
   });
 }
 
+export function toFieldErrors(errors: ValidationError[]): FieldError[] {
+  return dedupe(flatten(errors));
+}
+
 export function validationExceptionFactory(
   errors: ValidationError[],
 ): AppException {
@@ -88,6 +100,6 @@ export function validationExceptionFactory(
     HttpStatus.BAD_REQUEST,
     ErrorCode.VALIDATION_FAILED,
     'Validation failed',
-    dedupe(flatten(errors)),
+    toFieldErrors(errors),
   );
 }
