@@ -64,7 +64,7 @@ PLANNED (T14).
 |---|---|---|---|---|
 | id | String | yes | uuid() | Primary key |
 | organizationId | String | yes | - | FK to Organization |
-| name | String | yes | - | Unique within the organization |
+| name | String | yes | - | Trimmed, 1–50 characters. Unique within the organization ignoring case: the service checks case-insensitively, the database index is case-sensitive and only catches a race |
 | isActive | Boolean | yes | true | Deactivated, never deleted. Readings of an inactive tank are still accepted |
 
 Unique: `[organizationId, name]`. Index: `[organizationId]`.

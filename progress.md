@@ -4,7 +4,7 @@
 
 Implemented (T2–T13, T16): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): tanks (T14), readings sync (T15), the admin-action log (T17).
+Not implemented (marked **planned** below): tanks (T14), readings sync (T15), the admin-action log (T17), Swagger response schemas (T18).
 
 Known bugs today:
 
@@ -36,7 +36,8 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | not started | T10a |
 | T15 | `Reading` model; `POST /readings/sync` | not started | T6, T14 |
 | T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | done | T8 (best before T15) |
-| T17 | Structured admin-action log lines (including the user's own password change); required before the pilot goes live | not started | T10b, T11b |
+| T17 | Structured admin-action log lines (including the user's own password change and tank create/update); required before the pilot goes live | not started | T10b, T11b, T14 |
+| T18 | Swagger response schemas for every endpoint (response DTOs with `@ApiProperty`, one decorator that describes the `{ success, statusCode, data, timestamp }` envelope), after the shapes are settled | not started | T14, T15, T17 |
 
 ## API contract
 
@@ -62,8 +63,8 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /organizations/:id/transfer-admin` | `organization:transfer-admin` | `{ newAdminUserId, previousAdminRoleId }` | `{ message }` | 404 for an unknown organization or a user outside it; 409 `conflict` if the new admin is inactive; 400 `bad_request` if the user is already the admin or `previousAdminRoleId` is the admin role |
 | `GET /organization-roles` | any organization member (no key) | `organizationId` (super admin; required) | `[{ id, roleId, name, permissions, editable }]`, not paginated. The `admin` entry lists every org key and has `editable: false`. Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | implemented (T12) |
 | `PATCH /organization-roles/:id` | `organization-role:write` | `{ permissions }` (the full new list; org-level keys only; duplicates ignored) | the row, same shape as a list item | implemented (T12). A row of another organization: 404. The `admin` row: 403 `permission_denied`. Adding a key the caller does not hold: 403 `permission_denied` (removing is allowed). A platform or unknown key: 400 `validation_failed` with `field: permissions`, `code: not_allowed`. Effective on the next request; the client sees it at its next `GET /users/me` |
-| `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; not paginated). Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | planned (T14) |
-| `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name }`; `{ name?, isActive? }` | tank | planned (T14) |
+| `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; ordered by name; not paginated). Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | planned (T14) |
+| `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name, organizationId? }` (`organizationId` is required for the super admin); `{ name?, isActive? }` (at least one) | the tank, same shape as a list item | planned (T14). `name` is trimmed, 1–50 characters, unique within the organization ignoring case: a duplicate is 409 `tank_name_taken`. `PATCH` with no field: 400 `bad_request`. An inactive tank can still be renamed. A tank of another organization: 404 `tank_not_found` |
 | `POST /readings/sync` | `reading:create` | see below | see below | planned (T15) |
 | `GET /health` | none | — | `{ status, info, error, details }` | implemented |
 
@@ -138,7 +139,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | `organization_mismatch` | 403 | asked for another organization |
 | `org_admin_protected` | 409 | action not allowed on the organization's admin (deactivate, delete, role change) |
 | `cannot_target_self` | 409 | cannot delete, deactivate, change the role of, or reset the password of yourself |
-| `username_taken`, `email_taken`, `conflict` | 409 | uniqueness or foreign-key conflict |
+| `username_taken`, `email_taken`, `tank_name_taken`, `conflict` | 409 | uniqueness or foreign-key conflict |
 | `not_found`, `tank_not_found` | 404 | missing or outside your organization |
 | `id_conflict`, `recorded_at_in_future` | item level (sync) | see Readings sync |
 | `email_disabled` | 503 | email features are switched off |
@@ -175,7 +176,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-07: Role permissions stay per organization and are edited by the org admin (`OrganizationRole`). Global-only permissions (one place, edited by the super admin) were considered and dropped: the per-organization model is already built, and hatcheries may need different permissions.
 * 2026-11-07: Nobody can grant a key they do not hold (removing is allowed). The `admin` role always has every org key in the resolver (its row is never read), so a new key reaches existing organizations without a data migration. `GET /organization-roles` is readable by any organization member, so the `organization-role:read` key is removed; the create-user form needs the list.
 * 2026-11-07: Users leave an organization by deactivation; hard delete stays super-admin only (reaffirms 2026-10-17). Admin-driven password reset stays for now. Accountability comes from the admin-action log: the reset and the user's own password change are logged with the actor, and T17 is required before the pilot goes live.
-
+* 2026-11-08: Tank names are trimmed, 1–50 characters, unique within an organization ignoring case (checked in the service; the database index stays case-sensitive and only catches a race), duplicate → 409 `tank_name_taken`. Tank create and update (name, active) go into the admin-action log. Build order from here: T14, T15, T17, T18, then the frontend connects to the production server; T17 must be done before real hatchery data enters. Swagger response schemas wait until the shapes are settled (T18).
 
 ## Open decisions
 
