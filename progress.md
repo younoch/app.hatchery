@@ -78,7 +78,7 @@ Error envelope: see `AGENTS.md` → Error contract. Today: `{ success:false, sta
 
 "Batch" is reserved for the hatchery production batch (frontend Step 25); this endpoint is "sync".
 
-Request: `{ items: [{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxygenMgL, note? }] }`, 1–100 items (the frontend sends 20–50 per call on weak networks). `id` is a client UUID v4, `recordedAt` is ISO 8601.
+Request: `{ items: [{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxygenMgL, note? }] }`, 1–100 items (the frontend sends 20–50 per call on weak networks). `id` is a client UUID v4 (`invalid_uuid` otherwise). `recordedAt` is ISO 8601 with a time zone (`Z` or `±hh:mm`; otherwise `invalid_datetime`).
 
 Response `data`: `{ results: [{ index, id?, status, identical?, errors? }], totals: { created, duplicate, rejected } }`. HTTP 200 for any well-formed request, even when every item is rejected (the server logs a warning then).
 `index` is the item's position in the request (always present); `id` is echoed only when the item had a string `id`. Match results by `index`.
@@ -99,9 +99,11 @@ Server rules:
 
 * `createdById` from the token, `syncedAt = now()`. The client must not send `createdById`, `syncedAt`, `organizationId`; such fields reject the item (`not_allowed`).
 * `recordedAt` more than `READING_FUTURE_TOLERANCE_MS` (default 10 minutes) in the future → `recorded_at_in_future`.
-* Hard limits cover impossible values only: numbers must be finite and not negative; pH 0–14; `note` ≤ 200 chars. The frontend's sample ranges stay samples until the owner confirms real ranges (Open decisions).
+* `recordedAt` before 2020-01-01T00:00:00Z → `out_of_range` with `params: { min }` (an ISO string). An older value means a wrong phone clock.
+* Hard limits cover impossible values only, not ideal ranges: numbers must be finite; pH 0–14, temperature 0–60 °C, salinity 0–100 ppt, oxygen 0–30 mg/L, outside → `out_of_range { min, max }`. A dangerous but possible reading (low oxygen, odd pH) is stored. Ideal ranges and review flags wait for the owner (Open decisions). `note` is trimmed, at most 200 characters, and an empty note is stored as null.
 * `tankId` must belong to the caller's organization (super admin: any organization), else `tank_not_found`. Inactive tanks are accepted.
 * Same `id` from another user → `id_conflict`.
+* `identical` compares `tankId`, `recordedAt` (as an instant), the four values and `note`.
 * No edit or delete after sync: a correction is a new reading. "Last value" prefill stays per user and local to the phone. Organization-wide viewing is online only, later, behind `reading:read-all`.
 * Permission changes reach the client at its next `GET /users/me`; the server enforces them immediately (403 `permission_denied`, pending items kept).
 
@@ -177,6 +179,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-07: Nobody can grant a key they do not hold (removing is allowed). The `admin` role always has every org key in the resolver (its row is never read), so a new key reaches existing organizations without a data migration. `GET /organization-roles` is readable by any organization member, so the `organization-role:read` key is removed; the create-user form needs the list.
 * 2026-11-07: Users leave an organization by deactivation; hard delete stays super-admin only (reaffirms 2026-10-17). Admin-driven password reset stays for now. Accountability comes from the admin-action log: the reset and the user's own password change are logged with the actor, and T17 is required before the pilot goes live.
 * 2026-11-08: Tank names are trimmed, 1–50 characters, unique within an organization ignoring case (checked in the service; the database index stays case-sensitive and only catches a race), duplicate → 409 `tank_name_taken`. Tank create and update (name, active) go into the admin-action log. Build order from here: T14, T15, T17, T18, then the frontend connects to the production server; T17 must be done before real hatchery data enters. Swagger response schemas wait until the shapes are settled (T18).
+* 2026-11-08: Readings sync details. Value limits are impossible-value guards, never ideal ranges (pH 0–14, temperature 0–60 °C, salinity 0–100 ppt, oxygen 0–30 mg/L): a dangerous reading must be stored. `recordedAt` needs a time zone and is not accepted before 2020-01-01 (UTC); the future limit stays (10 minutes, `recorded_at_in_future`). `note` is trimmed, empty becomes null. `GET /readings` is not part of T15.
 
 ## Open decisions
 
@@ -213,3 +216,4 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * Admin-driven password reset: an admin can take over an account (set a temporary password, then change it). The log makes this traceable, not impossible. Revisit, together with the super admin being the only recovery path for a forgotten admin password (kept for now, decided 2026-11-07)
 * Durable `AuditLog` table (tamper-evident, with retention) for the admin-action log: before the first real hatchery
 * A reading's `createdById` identifies an account, not a person (shared or reset accounts)
+* A phone clock that runs ahead blocks its readings (`recorded_at_in_future`). Owner's idea (2026-11-08): store the server time instead of rejecting, with a flag on the result. Revisit if field staff get stuck during the pilot.

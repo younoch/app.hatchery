@@ -79,8 +79,8 @@ PLANNED (T15). Immutable in the pilot.
 | temperatureC | Float | yes | - | |
 | salinityPpt | Float | yes | - | |
 | oxygenMgL | Float | yes | - | |
-| note | String | no | - | Max 200 chars |
-| recordedAt | DateTime | yes | - | From the client (ISO 8601) |
+| note | String | no | - | Trimmed, max 200 chars. An empty note is stored as null |
+| recordedAt | DateTime | yes | - | From the client (ISO 8601 with a time zone). Not before 2020-01-01; more than 10 minutes in the future is rejected |
 | syncedAt | DateTime | yes | now() | Set by the server only |
 
 Index: `[createdById, tankId, recordedAt]` (matches the frontend's local index). Add `[tankId, recordedAt]` when the dashboard needs per-tank charts.
