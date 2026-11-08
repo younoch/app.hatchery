@@ -77,8 +77,9 @@ src/
 │   ├── role/
 │   ├── organization/
 │   ├── organization-role/
+│   ├── tank/
 │   ├── health/
-│   └── (planned) tank/ reading/
+│   └── (planned) reading/
 └── test/
 ```
 
