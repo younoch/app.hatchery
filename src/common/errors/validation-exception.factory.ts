@@ -71,6 +71,16 @@ function flatten(errors: ValidationError[], parent = ''): FieldError[] {
   });
 }
 
+function dedupe(errors: FieldError[]): FieldError[] {
+  const seen = new Set<string>();
+  return errors.filter((error) => {
+    const key = `${error.field}:${error.code}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function validationExceptionFactory(
   errors: ValidationError[],
 ): AppException {
@@ -78,6 +88,6 @@ export function validationExceptionFactory(
     HttpStatus.BAD_REQUEST,
     ErrorCode.VALIDATION_FAILED,
     'Validation failed',
-    flatten(errors),
+    dedupe(flatten(errors)),
   );
 }
