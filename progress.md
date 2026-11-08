@@ -36,7 +36,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | done | T10a |
 | T15 | `Reading` model; `POST /readings/sync` | done | T6, T14 |
 | T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | done | T8 (best before T15) |
-| T17 | Structured admin-action log lines (including the user's own password change and tank create/update); required before the pilot goes live | not started | T10b, T11b, T14 |
+| T17 | `AdminActionLogger` (`common/audit/`) and one structured pino line per successful admin action, catalog in `AGENTS.md` → Business rules (including the user's own password change, user delete and tank create/update); required before the pilot goes live | not started | T10b, T11b, T14 |
 | T18 | Swagger response schemas for every endpoint (response DTOs with `@ApiProperty`, one decorator that describes the `{ success, statusCode, data, timestamp }` envelope), after the shapes are settled | not started | T14, T15, T17 |
 
 ## API contract
@@ -180,6 +180,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-07: Users leave an organization by deactivation; hard delete stays super-admin only (reaffirms 2026-10-17). Admin-driven password reset stays for now. Accountability comes from the admin-action log: the reset and the user's own password change are logged with the actor, and T17 is required before the pilot goes live.
 * 2026-11-08: Tank names are trimmed, 1–50 characters, unique within an organization ignoring case (checked in the service; the database index stays case-sensitive and only catches a race), duplicate → 409 `tank_name_taken`. Tank create and update (name, active) go into the admin-action log. Build order from here: T14, T15, T17, T18, then the frontend connects to the production server; T17 must be done before real hatchery data enters. Swagger response schemas wait until the shapes are settled (T18).
 * 2026-11-08: Readings sync details. Value limits are impossible-value guards, never ideal ranges (pH 0–14, temperature 0–60 °C, salinity 0–100 ppt, oxygen 0–30 mg/L): a dangerous reading must be stored. `recordedAt` needs a time zone and is not accepted before 2020-01-01 (UTC); the future limit stays (10 minutes, `recorded_at_in_future`). `note` is trimmed, empty becomes null. `GET /readings` is not part of T15.
+* 2026-11-08: Admin-action log (T17). One pino line (`msg: "admin_action"`) with `{ action, actorId, organizationId, targetId, details }`, written by `AdminActionLogger` after the change is saved; failed attempts are not logged. `details` records what changed (role `{ from, to }`, permissions `{ added, removed }`, tank fields `{ from, to }`) and never a password, hash or token. `user.delete` (super admin) is added to the list; a user's `name` change is not logged. The log is pino output, not durable or tamper-evident: the `AuditLog` table stays in the parking lot. No frontend impact.
 
 ## Open decisions
 

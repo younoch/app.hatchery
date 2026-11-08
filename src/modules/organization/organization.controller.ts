@@ -14,6 +14,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { RequirePermission } from '@/common/decorators/require-permission.decorator';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import type { JwtUser } from '@/common/types/jwt-user.type';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { TransferAdminDto } from './dto/transfer-admin.dto';
@@ -26,8 +28,11 @@ export class OrganizationController {
 
   @RequirePermission('organization:create')
   @Post()
-  create(@Body() dto: CreateOrganizationDto) {
-    return this.organizationService.create(dto);
+  create(
+    @Body() dto: CreateOrganizationDto,
+    @CurrentUser() currentUser: JwtUser,
+  ) {
+    return this.organizationService.create(dto, currentUser);
   }
 
   @RequirePermission('organization:read')
@@ -39,7 +44,11 @@ export class OrganizationController {
   @RequirePermission('organization:transfer-admin')
   @Post(':id/transfer-admin')
   @HttpCode(HttpStatus.OK)
-  transferAdmin(@Param('id') id: string, @Body() dto: TransferAdminDto) {
-    return this.organizationService.transferAdmin(id, dto);
+  transferAdmin(
+    @Param('id') id: string,
+    @Body() dto: TransferAdminDto,
+    @CurrentUser() currentUser: JwtUser,
+  ) {
+    return this.organizationService.transferAdmin(id, dto, currentUser);
   }
 }

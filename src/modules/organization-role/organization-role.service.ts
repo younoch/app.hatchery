@@ -4,6 +4,7 @@ import { ErrorCode } from '@/common/errors/error-codes';
 import type { JwtUser } from '@/common/types/jwt-user.type';
 import { UserPermissionResolver } from '@/common/permissions/user-permission.resolver';
 import { OrganizationRoleRepository } from '@/common/repositories/organization-role.repository';
+import { AdminActionLogger } from '@/common/audit/admin-action-logger';
 import { resolveOrganizationId } from '@/common/tenant/resolve-organization-id';
 import { toOrganizationRoleResponse } from './organization-role.mapper';
 
@@ -12,6 +13,7 @@ export class OrganizationRoleService {
   constructor(
     private readonly organizationRoleRepository: OrganizationRoleRepository,
     private readonly permissionResolver: UserPermissionResolver,
+    private readonly adminActionLogger: AdminActionLogger,
   ) {}
 
   async list(caller: JwtUser, requestedOrganizationId?: string) {
@@ -64,6 +66,16 @@ export class OrganizationRoleService {
       row.id,
       requested,
     );
+    const removed = row.permissions.filter((key) => !requested.includes(key));
+    if (added.length > 0 || removed.length > 0) {
+      this.adminActionLogger.log({
+        action: 'organization_role.update',
+        actorId: caller.userId,
+        organizationId: row.organizationId,
+        targetId: row.id,
+        details: { role: row.role.name, added, removed },
+      });
+    }
     return toOrganizationRoleResponse(updated);
   }
 }

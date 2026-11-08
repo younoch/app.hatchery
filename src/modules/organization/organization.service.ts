@@ -16,6 +16,8 @@ import { OrganizationRepository } from './repository/organization.repository';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { TransferAdminDto } from './dto/transfer-admin.dto';
 import { UserService } from '../user/user.service';
+import { AdminActionLogger } from '@/common/audit/admin-action-logger';
+import type { JwtUser } from '@/common/types/jwt-user.type';
 
 @Injectable()
 export class OrganizationService {
@@ -26,9 +28,10 @@ export class OrganizationService {
     private readonly userRepository: UserRepository,
     private readonly roleRepository: RoleRepository,
     private readonly userService: UserService,
+    private readonly adminActionLogger: AdminActionLogger,
   ) {}
 
-  async create(dto: CreateOrganizationDto) {
+  async create(dto: CreateOrganizationDto, caller: JwtUser) {
     const roles = await this.roleRepository.findAll();
     const adminRole = roles.find((role) => role.name === 'admin');
     if (!adminRole) {
@@ -40,7 +43,7 @@ export class OrganizationService {
 
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const organization = await this.organizationRepository.create(
         dto.name,
         tx,
@@ -77,6 +80,14 @@ export class OrganizationService {
         },
       };
     });
+    this.adminActionLogger.log({
+      action: 'organization.create',
+      actorId: caller.userId,
+      organizationId: result.id,
+      targetId: result.id,
+      details: { name: result.name, adminId: result.admin.id },
+    });
+    return result;
   }
 
   list(query: PaginationQueryDto) {
@@ -88,7 +99,11 @@ export class OrganizationService {
     );
   }
 
-  async transferAdmin(organizationId: string, dto: TransferAdminDto) {
+  async transferAdmin(
+    organizationId: string,
+    dto: TransferAdminDto,
+    caller: JwtUser,
+  ) {
     const adminRole = await this.roleRepository.findByName('admin');
     if (!adminRole) {
       throw new InternalServerErrorException('Global roles are not seeded');
@@ -110,8 +125,7 @@ export class OrganizationService {
         'Role not found',
       );
     }
-
-    await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const exists = await this.organizationRepository.lockById(
         organizationId,
         tx,
@@ -164,8 +178,22 @@ export class OrganizationService {
         );
       }
       await this.userRepository.updateRole(newAdmin.id, adminRole.id, tx);
+      return {
+        previousAdminId: currentAdmin?.id ?? null,
+        newAdminId: newAdmin.id,
+      };
     });
 
+    this.adminActionLogger.log({
+      action: 'organization.transfer_admin',
+      actorId: caller.userId,
+      organizationId,
+      targetId: result.newAdminId,
+      details: {
+        previousAdminId: result.previousAdminId,
+        previousAdminRoleId: previousRole.id,
+      },
+    });
     return { message: 'Admin transferred' };
   }
 }

@@ -6,9 +6,10 @@ import { EmailVerificationRepository } from './repository/email-verification.rep
 import { RoleModule } from '../role/role.module';
 import { PermissionsModule } from '@/common/permissions/permissions.module';
 import { RepositoriesModule } from '@/common/repositories/repositories.module';
+import { AuditModule } from '@/common/audit/audit.module';
 
 @Module({
-  imports: [PrismaModule, RoleModule, RepositoriesModule, PermissionsModule],
+  imports: [PrismaModule, RoleModule, RepositoriesModule, PermissionsModule, AuditModule],
   providers: [UserService, EmailVerificationRepository],
   controllers: [UserController],
   exports: [UserService],

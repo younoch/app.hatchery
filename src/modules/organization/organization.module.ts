@@ -7,6 +7,7 @@ import { OrganizationController } from './organization.controller';
 import { OrganizationService } from './organization.service';
 import { OrganizationRepository } from './repository/organization.repository';
 import { UserModule } from '../user/user.module';
+import { AuditModule } from '@/common/audit/audit.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { UserModule } from '../user/user.module';
     PermissionsModule,
     RoleModule,
     UserModule,
+    AuditModule,
   ],
   controllers: [OrganizationController],
   providers: [OrganizationService, OrganizationRepository],

@@ -6,6 +6,7 @@ import { AllowMustChangePassword } from '@/common/decorators/allow-must-change-p
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import type { JwtUser } from '@/common/types/jwt-user.type';
 import { UpdatePasswordDto } from '@/modules/user/dto/update-password.dto';
+import { AdminActionLogger } from '@/common/audit/admin-action-logger';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { REFRESH_COOKIE_NAME } from './auth.constants';
@@ -18,6 +19,7 @@ export class AccountController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly adminActionLogger: AdminActionLogger,
   ) {}
 
   @AllowMustChangePassword()
@@ -32,6 +34,12 @@ export class AccountController {
       dto.currentPassword,
       dto.newPassword,
     );
+    this.adminActionLogger.log({
+      action: 'user.password_change',
+      actorId: currentUser.userId,
+      organizationId: currentUser.organizationId,
+      targetId: currentUser.userId,
+    });
     response.cookie(
       REFRESH_COOKIE_NAME,
       result.refresh_token,

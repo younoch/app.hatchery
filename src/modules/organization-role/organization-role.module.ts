@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { RepositoriesModule } from '@/common/repositories/repositories.module';
 import { PermissionsModule } from '@/common/permissions/permissions.module';
+import { AuditModule } from '@/common/audit/audit.module';
 import { OrganizationRoleController } from './organization-role.controller';
 import { OrganizationRoleService } from './organization-role.service';
 
 @Module({
-  imports: [RepositoriesModule, PermissionsModule],
+  imports: [RepositoriesModule, PermissionsModule, AuditModule],
   controllers: [OrganizationRoleController],
   providers: [OrganizationRoleService],
 })

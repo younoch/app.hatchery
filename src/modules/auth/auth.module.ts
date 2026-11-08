@@ -15,6 +15,7 @@ import { BullBoardModule } from '@bull-board/nestjs';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { RepositoriesModule } from '@/common/repositories/repositories.module';
 import { PrismaModule } from '@/common/prisma/prisma.module';
+import { AuditModule } from '@/common/audit/audit.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PrismaModule } from '@/common/prisma/prisma.module';
     EmailModule,
     RepositoriesModule,
     PrismaModule,
+    AuditModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {

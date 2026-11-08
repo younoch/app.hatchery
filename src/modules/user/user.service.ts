@@ -17,6 +17,7 @@ import { UserPermissionResolver } from '@/common/permissions/user-permission.res
 import { OrganizationRoleRepository } from '@/common/repositories/organization-role.repository';
 import { resolveOrganizationId } from '@/common/tenant/resolve-organization-id';
 import { RefreshTokenRepository } from '@/common/repositories/refresh-token.repository';
+import { AdminActionLogger } from '@/common/audit/admin-action-logger';
 
 import { UserRepository } from '../../common/repositories/user.repository';
 import { EmailVerificationRepository } from './repository/email-verification.repository';
@@ -36,6 +37,7 @@ export class UserService {
     private readonly permissionResolver: UserPermissionResolver,
     private readonly organizationRoleRepository: OrganizationRoleRepository,
     private readonly refreshTokenRepository: RefreshTokenRepository,
+    private readonly adminActionLogger: AdminActionLogger,
   ) {}
 
   findByEmail(email: string) {
@@ -109,6 +111,13 @@ export class UserService {
       organizationId,
       roleId: role.id,
       mustChangePassword: true,
+    });
+    this.adminActionLogger.log({
+      action: 'user.create',
+      actorId: caller.userId,
+      organizationId,
+      targetId: user.id,
+      details: { roleId: role.id },
     });
     return toUserResponse({
       ...user,
@@ -220,7 +229,15 @@ export class UserService {
         "The organization's admin cannot be deleted",
       );
     }
-    return this.userRepository.deleteUser(userId);
+    const deleted = await this.userRepository.deleteUser(userId);
+    this.adminActionLogger.log({
+      action: 'user.delete',
+      actorId: currentUserId,
+      organizationId: target.organizationId,
+      targetId: userId,
+      details: { username: target.username },
+    });
+    return deleted;
   }
   // A target outside the caller's organization, or a super admin account, is
   // 404, so existence is not revealed.
@@ -304,6 +321,25 @@ export class UserService {
       }
       return updated;
     });
+
+    const base = {
+      actorId: caller.userId,
+      organizationId: target.organizationId,
+      targetId: target.id,
+    };
+    if (dto.roleId !== undefined && dto.roleId !== target.roleId) {
+      this.adminActionLogger.log({
+        ...base,
+        action: 'user.role_change',
+        details: { from: target.roleId, to: dto.roleId },
+      });
+    }
+    if (dto.isActive !== undefined && dto.isActive !== target.isActive) {
+      this.adminActionLogger.log({
+        ...base,
+        action: dto.isActive ? 'user.activate' : 'user.deactivate',
+      });
+    }
     return toUserResponse(user);
   }
 
@@ -337,6 +373,12 @@ export class UserService {
         tx,
       );
       await this.refreshTokenRepository.revokeAllForUser(target.id, tx);
+    });
+    this.adminActionLogger.log({
+      action: 'user.reset_password',
+      actorId: caller.userId,
+      organizationId: target.organizationId,
+      targetId: target.id,
     });
     return { message: 'Password reset. The user must change it at next login' };
   }

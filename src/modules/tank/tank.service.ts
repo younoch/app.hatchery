@@ -3,6 +3,7 @@ import { AppException } from '@/common/errors/app.exception';
 import { ErrorCode } from '@/common/errors/error-codes';
 import type { JwtUser } from '@/common/types/jwt-user.type';
 import { TankRepository } from '@/common/repositories/tank.repository';
+import { AdminActionLogger } from '@/common/audit/admin-action-logger';
 import { resolveOrganizationId } from '@/common/tenant/resolve-organization-id';
 import { CreateTankDto } from './dto/create-tank.dto';
 import { UpdateTankDto } from './dto/update-tank.dto';
@@ -10,7 +11,10 @@ import { toTankResponse } from './tank.mapper';
 
 @Injectable()
 export class TankService {
-  constructor(private readonly tankRepository: TankRepository) {}
+  constructor(
+    private readonly tankRepository: TankRepository,
+    private readonly adminActionLogger: AdminActionLogger,
+  ) {}
 
   async list(caller: JwtUser, requestedOrganizationId?: string) {
     const organizationId = resolveOrganizationId(
@@ -26,6 +30,13 @@ export class TankService {
     const organizationId = resolveOrganizationId(caller, dto.organizationId);
     await this.assertNameFree(organizationId, dto.name);
     const tank = await this.tankRepository.create(organizationId, dto.name);
+    this.adminActionLogger.log({
+      action: 'tank.create',
+      actorId: caller.userId,
+      organizationId,
+      targetId: tank.id,
+      details: { name: tank.name },
+    });
     return toTankResponse(tank);
   }
 
@@ -59,6 +70,22 @@ export class TankService {
       name: dto.name,
       isActive: dto.isActive,
     });
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    if (dto.name !== undefined && dto.name !== tank.name) {
+      changes.name = { from: tank.name, to: updated.name };
+    }
+    if (dto.isActive !== undefined && dto.isActive !== tank.isActive) {
+      changes.isActive = { from: tank.isActive, to: updated.isActive };
+    }
+    if (Object.keys(changes).length > 0) {
+      this.adminActionLogger.log({
+        action: 'tank.update',
+        actorId: caller.userId,
+        organizationId: tank.organizationId,
+        targetId: tank.id,
+        details: changes,
+      });
+    }
     return toTankResponse(updated);
   }
 
