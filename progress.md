@@ -34,7 +34,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T12 | `GET/PATCH /organization-roles`; the `admin` role gets every org key in the resolver; remove the `organization-role:read` key (map, templates, seed) | done | T10b |
 | T13 | Remove `/auth/register`, `/auth/register-async`; `EMAIL_ENABLED` gating (503 `email_disabled`) | done | T9 |
 | T14 | `Tank` model; `POST/GET/PATCH /tanks` | done | T10a |
-| T15 | `Reading` model; `POST /readings/sync` | not started | T6, T14 |
+| T15 | `Reading` model; `POST /readings/sync` | done | T6, T14 |
 | T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | done | T8 (best before T15) |
 | T17 | Structured admin-action log lines (including the user's own password change and tank create/update); required before the pilot goes live | not started | T10b, T11b, T14 |
 | T18 | Swagger response schemas for every endpoint (response DTOs with `@ApiProperty`, one decorator that describes the `{ success, statusCode, data, timestamp }` envelope), after the shapes are settled | not started | T14, T15, T17 |
