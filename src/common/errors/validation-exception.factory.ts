@@ -79,13 +79,25 @@ function flatten(errors: ValidationError[], parent = ''): FieldError[] {
   });
 }
 
+// One field can fail several decorators. A missing value or a wrong type is
+// the root cause: when it is present, the length or range errors of that
+// field are noise, so only the root cause is reported, once.
 function dedupe(errors: FieldError[]): FieldError[] {
+  const root = new Map<string, FieldError>();
+  for (const code of [ErrorCode.REQUIRED, ErrorCode.INVALID_TYPE]) {
+    for (const error of errors) {
+      if (error.code === code && !root.has(error.field)) {
+        root.set(error.field, error);
+      }
+    }
+  }
   const seen = new Set<string>();
-  return errors.filter((error) => {
-    const key = `${error.field}:${error.code}`;
-    if (seen.has(key)) return false;
+  return errors.flatMap((error) => {
+    const picked = root.get(error.field) ?? error;
+    const key = `${picked.field}:${picked.code}`;
+    if (seen.has(key)) return [];
     seen.add(key);
-    return true;
+    return [picked];
   });
 }
 
