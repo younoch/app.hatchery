@@ -27,6 +27,7 @@ export const ErrorCode = {
   CANNOT_TARGET_SELF: 'cannot_target_self',
   USERNAME_TAKEN: 'username_taken',
   EMAIL_TAKEN: 'email_taken',
+  TANK_NAME_TAKEN: 'tank_name_taken',
   CONFLICT: 'conflict',
   NOT_FOUND: 'not_found',
   TANK_NOT_FOUND: 'tank_not_found',

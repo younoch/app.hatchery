@@ -59,7 +59,6 @@ Unique: `[organizationId, roleId]`.
 A user's effective permissions are the row matching `(user.organizationId, user.roleId)` (the `admin` role is the exception: every org key).
 
 ### Tank
-PLANNED (T14).
 | field | type | required | default | notes |
 |---|---|---|---|---|
 | id | String | yes | uuid() | Primary key |
@@ -67,7 +66,7 @@ PLANNED (T14).
 | name | String | yes | - | Trimmed, 1–50 characters. Unique within the organization ignoring case: the service checks case-insensitively, the database index is case-sensitive and only catches a race |
 | isActive | Boolean | yes | true | Deactivated, never deleted. Readings of an inactive tank are still accepted |
 
-Unique: `[organizationId, name]`. Index: `[organizationId]`.
+Unique: `[organizationId, name]` (it also serves lookups by organization, so there is no separate index). The foreign key to Organization is `Restrict`.
 
 ### Reading
 PLANNED (T15). Immutable in the pilot.

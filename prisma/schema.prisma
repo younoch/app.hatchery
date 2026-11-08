@@ -43,6 +43,17 @@ model Organization {
   name              String
   users             User[]
   organizationRoles OrganizationRole[]
+  tanks             Tank[]
+}
+
+model Tank {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  isActive       Boolean      @default(true)
+
+  @@unique([organizationId, name])
 }
 
 model OrganizationRole {
