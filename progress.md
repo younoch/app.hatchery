@@ -2,8 +2,9 @@
 
 ## Current state
 
-Implemented (T2–T17): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
+Implemented (T2–T18): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging, Swagger response schemas. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
+Not implemented (marked **planned** below): production readiness (T19, T20).
 
 Known bugs today:
 
@@ -37,6 +38,8 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | done | T8 (best before T15) |
 | T17 | `AdminActionLogger` (`common/audit/`) and one structured pino line per successful admin action, catalog in `AGENTS.md` → Business rules (including the user's own password change, user delete and tank create/update); required before the pilot goes live | done | T10b, T11b, T14 |
 | T18 | Swagger response schemas for every endpoint (response DTOs with `@ApiProperty`, one decorator that describes the `{ success, statusCode, data, timestamp }` envelope), after the shapes are settled | done | T14, T15, T17 |
+| T19 | Production readiness in code: `REFRESH_COOKIE_PATH` (env, default `/auth/refresh`) and `TRUST_PROXY` (hop count, default 0) settings; Swagger (`/api`, `/api-json`) off in production unless `SWAGGER_ENABLED=true`; queues (BullMQ, Redis) and the `/queues` dashboard load only when `EMAIL_ENABLED=true`; `x-powered-by` off | not started | T18 |
+| T20 | `DEPLOY.md` (Render + Neon + Vercel rewrite step by step, production env table, build and start commands, finding the right `TRUST_PROXY`) and a nightly `pg_dump` backup workflow (GitHub Actions); required before real hatchery data enters production | not started | T19 |
 
 ## API contract
 
@@ -181,6 +184,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-08: Readings sync details. Value limits are impossible-value guards, never ideal ranges (pH 0–14, temperature 0–60 °C, salinity 0–100 ppt, oxygen 0–30 mg/L): a dangerous reading must be stored. `recordedAt` needs a time zone and is not accepted before 2020-01-01 (UTC); the future limit stays (10 minutes, `recorded_at_in_future`). `note` is trimmed, empty becomes null. `GET /readings` is not part of T15.
 * 2026-11-08: Admin-action log (T17). One pino line (`msg: "admin_action"`) with `{ action, actorId, organizationId, targetId, details }`, written by `AdminActionLogger` after the change is saved; failed attempts are not logged. `details` records what changed (role `{ from, to }`, permissions `{ added, removed }`, tank fields `{ from, to }`) and never a password, hash or token. `user.delete` (super admin) is added to the list; a user's `name` change is not logged. The log is pino output, not durable or tamper-evident: the `AuditLog` table stays in the parking lot. No frontend impact.
 * 2026-11-09: Swagger response schemas (T18). Every endpoint declares its response through `ApiEnvelope`, `ApiPaginatedEnvelope` and `ApiErrors` (`common/swagger/`); response shapes are `*ResponseDto` classes and the mappers and services are typed with them, so a drift between code and documented shape fails the build. `DELETE /users/:id` now returns `{ message }` as the contract always said (it returned the raw user record). `/health` keeps its own documentation. The contract stays in `progress.md`; `/api-json` must say the same.
+* 2026-11-10: Pilot hosting: backend on Render's free web service, database on Neon's free Postgres (Render's own free Postgres expires after 30 days), frontend on Vercel Hobby, no domain yet. The browser talks only to the Vercel origin: the frontend proxies `/api/*` to the backend with a Vercel rewrite, so the refresh cookie is first-party (`SameSite=lax`, no CORS needed) and `REFRESH_COOKIE_PATH` becomes `/api/auth/refresh`. Cross-site cookies (`SameSite=none` between `vercel.app` and `onrender.com`) are rejected because some browsers block them. Render has no shell, so migrations and the seed run in the build step (`prisma migrate deploy`, `prisma db seed`; the seed is idempotent). Render's free tier is not meant for production (its docs say so) and sleeps after 15 minutes (about a minute to wake); that is acceptable for the pilot because sync is offline-first, but the first request after a sleep can be slow and the frontend must retry. Real hatchery data waits for the nightly backup (T20). Configuration stays in environment variables only, so a move to a dedicated VPS is a data restore plus an env change. Redis is not deployed: queues and the `/queues` dashboard (which has no login) load only when `EMAIL_ENABLED=true`. Swagger is off in production unless `SWAGGER_ENABLED=true`.
 
 ## Open decisions
 
@@ -196,8 +200,9 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * `ReadingAudit` and an audited PATCH for synced readings; `isLate` derived from `syncedAt - recordedAt`; `needsReview` once ranges are confirmed
 * Pull sync (cursor `syncedAt`, not `recordedAt`), `GET /readings` (organization-wide, `reading:read-all`), dashboard index `[tankId, recordedAt]`
 * Email: switch-on checklist, verification flow, email-based reset, invitation flow
-* Deployment: one registrable domain with `app.` and `api.` subdomains (cookie `SameSite=lax`); production checklist (HTTPS, backups, secrets)
-* Configurable refresh cookie `Path` (frontend request F→B-06); today it is hard-coded to `/auth/refresh` in `auth.constants.ts`
+* Dedicated VPS later: buy a domain and use `app.` and `api.` subdomains (cookie `SameSite=lax`, `REFRESH_COOKIE_PATH` back to `/auth/refresh`); HTTPS with Caddy; a mail provider needs the same domain
+* Security headers with `helmet` (new dependency: ask the owner first)
+* Optional uptime pinger to keep the Render free service awake
 * Brute-force protection beyond rate limits (decided 2026-10-30: after the pilot presentation): per-account lockout (counter with a time window, `account_locked` code, admin reset unlocks, super admin exempt), optional `deviceId` for audit logs only (never a security barrier; MAC addresses are not readable from a browser)
 * Fix or remove `POST /auth/logout` (the cookie Path means browsers never send the cookie)
 * `PATCH /users/me` (edit own name)
