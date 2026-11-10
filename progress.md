@@ -224,3 +224,4 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * A phone clock that runs ahead blocks its readings (`recorded_at_in_future`). Owner's idea (2026-11-08): store the server time instead of rejecting, with a flag on the result. Revisit if field staff get stuck during the pilot.
 * Swagger error lists are per controller (a superset), so some endpoints show error codes they never return (for example 409 on `GET /users/me`); make `@ApiErrors` per endpoint if the frontend ever generates types from `/api-json`
 ### Repository pattern
+* Protect the `/queues` dashboard with a login before email is switched on in production

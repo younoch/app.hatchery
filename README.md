@@ -91,11 +91,14 @@ Every variable the code reads is validated at startup in `src/config/env.validat
 | `REFRESH_GRACE_MS` | — | `30000` | A just-rotated refresh token is accepted again for this long (lost response, two tabs) |
 | `COOKIE_SECURE` | — | `false` locally, `true` in production | `true` for HTTPS. Must be `true` in production |
 | `COOKIE_SAME_SITE` | — | `lax` | `strict`, `lax` or `none`. `none` needs `COOKIE_SECURE=true`; prefer one registrable domain with `lax` |
+| `REFRESH_COOKIE_PATH` | — | `/auth/refresh` | Path of the refresh cookie; the browser sends it only there. Behind a frontend proxy that adds a prefix (the Vercel rewrite `/api/*`) set `/api/auth/refresh` |
+| `TRUST_PROXY` | — | `0` | Number of proxies in front of the app (`X-Forwarded-For` hops), used to find the client IP for rate limits. Too low: every user shares one IP bucket. Too high: a client can fake its IP. `DEPLOY.md` explains how to find it |
+| `SWAGGER_ENABLED` | — | `true` outside production, `false` in production | Serves `/api` and `/api-json` |
 | `FRONTEND_URL` | — | `http://localhost:3000` | Default allowed browser origin. No wildcard |
 | `CORS_ORIGINS` | — | `FRONTEND_URL` | Comma-separated allowed origins for credentialed CORS. No wildcard |
 | `APP_URL` | — | `http://localhost:4000` | Used to build links in emails |
-| `REDIS_HOST` / `REDIS_PORT` | — | `localhost` / `6379` | |
-| `EMAIL_ENABLED` | — | `false` | When false, forgot/reset/verify answer 503 `email_disabled` |
+| `REDIS_HOST` / `REDIS_PORT` | — | `localhost` / `6379` | Used only when `EMAIL_ENABLED=true` (queues); with email off no Redis is needed |
+| `EMAIL_ENABLED` | — | `false` | When false, forgot/reset/verify answer 503 `email_disabled`, and the queues, their worker and the `/queues` dashboard are not loaded (no Redis needed). `/queues` has no login: protect it before enabling email in production |
 | `SMTP_HOST` / `SMTP_PORT` | — | `localhost` / `1025` | Mailpit in dev |
 | `SMTP_USER` / `SMTP_PASS` | — | — | Optional. Needed for a real provider |
 | `SMTP_SECURE` | — | `false` | `true` for implicit TLS (usually port 465) |
