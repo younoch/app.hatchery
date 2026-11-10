@@ -4,7 +4,6 @@
 
 Implemented (T2–T17): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): Swagger response schemas (T18).
 
 Known bugs today:
 
@@ -37,7 +36,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T15 | `Reading` model; `POST /readings/sync` | done | T6, T14 |
 | T16 | Session hardening: transaction + grace window + token family + `session_revoked` + takeover; revoke all older refresh tokens on password change (the response issues a fresh pair), reset and deactivation | done | T8 (best before T15) |
 | T17 | `AdminActionLogger` (`common/audit/`) and one structured pino line per successful admin action, catalog in `AGENTS.md` → Business rules (including the user's own password change, user delete and tank create/update); required before the pilot goes live | done | T10b, T11b, T14 |
-| T18 | Swagger response schemas for every endpoint (response DTOs with `@ApiProperty`, one decorator that describes the `{ success, statusCode, data, timestamp }` envelope), after the shapes are settled | not started | T14, T15, T17 |
+| T18 | Swagger response schemas for every endpoint (response DTOs with `@ApiProperty`, one decorator that describes the `{ success, statusCode, data, timestamp }` envelope), after the shapes are settled | done | T14, T15, T17 |
 
 ## API contract
 
@@ -198,7 +197,6 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * Pull sync (cursor `syncedAt`, not `recordedAt`), `GET /readings` (organization-wide, `reading:read-all`), dashboard index `[tankId, recordedAt]`
 * Email: switch-on checklist, verification flow, email-based reset, invitation flow
 * Deployment: one registrable domain with `app.` and `api.` subdomains (cookie `SameSite=lax`); production checklist (HTTPS, backups, secrets)
-* Swagger response schemas (`@ApiProperty`/`@ApiResponse` on response DTOs) so frontend types can be generated from `/api-json` (frontend declined type generation for now: B→F-12)
 * Configurable refresh cookie `Path` (frontend request F→B-06); today it is hard-coded to `/auth/refresh` in `auth.constants.ts`
 * Brute-force protection beyond rate limits (decided 2026-10-30: after the pilot presentation): per-account lockout (counter with a time window, `account_locked` code, admin reset unlocks, super admin exempt), optional `deviceId` for audit logs only (never a security barrier; MAC addresses are not readable from a browser)
 * Fix or remove `POST /auth/logout` (the cookie Path means browsers never send the cookie)
@@ -219,4 +217,5 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * Durable `AuditLog` table (tamper-evident, with retention) for the admin-action log: before the first real hatchery
 * A reading's `createdById` identifies an account, not a person (shared or reset accounts)
 * A phone clock that runs ahead blocks its readings (`recorded_at_in_future`). Owner's idea (2026-11-08): store the server time instead of rejecting, with a flag on the result. Revisit if field staff get stuck during the pilot.
-* `DELETE /users/:id` returns the raw user record (with `roleId`, `updatedAt`, `emailVerified`, `isSuperAdmin`) instead of the user response shape; harmless (no password) but inconsistent with the other user endpoints### Repository pattern
+* Swagger error lists are per controller (a superset), so some endpoints show error codes they never return (for example 409 on `GET /users/me`); make `@ApiErrors` per endpoint if the frontend ever generates types from `/api-json`
+### Repository pattern
