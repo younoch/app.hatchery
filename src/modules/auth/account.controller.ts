@@ -1,12 +1,18 @@
 import { Body, Controller, Patch, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AllowMustChangePassword } from '@/common/decorators/allow-must-change-password.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import type { JwtUser } from '@/common/types/jwt-user.type';
 import { UpdatePasswordDto } from '@/modules/user/dto/update-password.dto';
 import { AdminActionLogger } from '@/common/audit/admin-action-logger';
+import {
+  ApiEnvelope,
+  ApiErrors,
+  REFRESH_COOKIE_HEADER,
+} from '@/common/swagger/api-envelope';
+import { PasswordChangedResponseDto } from './dto/auth-response.dto';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { REFRESH_COOKIE_NAME } from './auth.constants';
@@ -14,6 +20,8 @@ import { refreshCookieOptions } from './refresh-cookie';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@ApiTags('Users')
+@ApiErrors(400, 401, 403, 429)
 @Controller('users')
 export class AccountController {
   constructor(
@@ -23,6 +31,7 @@ export class AccountController {
   ) {}
 
   @AllowMustChangePassword()
+  @ApiEnvelope(PasswordChangedResponseDto, { headers: REFRESH_COOKIE_HEADER })
   @Patch('me/password')
   async changePassword(
     @Body() dto: UpdatePasswordDto,

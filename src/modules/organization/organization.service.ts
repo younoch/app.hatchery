@@ -15,6 +15,7 @@ import { RoleRepository } from '../role/repository/role.repository';
 import { OrganizationRepository } from './repository/organization.repository';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { TransferAdminDto } from './dto/transfer-admin.dto';
+import type { OrganizationCreatedDto } from './dto/organization-response.dto';
 import { UserService } from '../user/user.service';
 import { AdminActionLogger } from '@/common/audit/admin-action-logger';
 import type { JwtUser } from '@/common/types/jwt-user.type';
@@ -31,7 +32,10 @@ export class OrganizationService {
     private readonly adminActionLogger: AdminActionLogger,
   ) {}
 
-  async create(dto: CreateOrganizationDto, caller: JwtUser) {
+  async create(
+    dto: CreateOrganizationDto,
+    caller: JwtUser,
+  ): Promise<OrganizationCreatedDto> {
     const roles = await this.roleRepository.findAll();
     const adminRole = roles.find((role) => role.name === 'admin');
     if (!adminRole) {

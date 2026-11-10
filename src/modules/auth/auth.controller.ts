@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiCookieAuth } from '@nestjs/swagger';
+import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { Request, Response, CookieOptions } from 'express';
 import { LoginDto } from './dto/auth.dto';
 import { AuthService } from './auth.service';
@@ -22,6 +22,15 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { EmailEnabledGuard } from '@/common/guards/email-enabled.guard';
 import { REFRESH_COOKIE_NAME } from './auth.constants';
 import { refreshCookieOptions } from './refresh-cookie';
+import {
+  ApiEnvelope,
+  ApiErrors,
+  REFRESH_COOKIE_HEADER,
+} from '@/common/swagger/api-envelope';
+import { MessageResponseDto } from '@/common/swagger/message-response.dto';
+import { AccessTokenResponseDto } from './dto/auth-response.dto';
+@ApiTags('Auth')
+@ApiErrors(400, 401, 429, 503)
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -29,6 +38,7 @@ export class AuthController {
     private configService: ConfigService,
   ) {}
 
+  @ApiEnvelope(AccessTokenResponseDto, { headers: REFRESH_COOKIE_HEADER })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -44,23 +54,27 @@ export class AuthController {
     return { access_token: tokens.access_token };
   }
   @UseGuards(EmailEnabledGuard)
+  @ApiEnvelope(MessageResponseDto)
   @Get('verify-email')
   verifyEmail(@Query() query: VerifyEmailDto) {
     return this.authService.verifyEmail(query.token);
   }
 
   @UseGuards(EmailEnabledGuard)
+  @ApiEnvelope(MessageResponseDto, { status: 201 })
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }
 
   @UseGuards(EmailEnabledGuard)
+  @ApiEnvelope(MessageResponseDto, { status: 201 })
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword);
   }
 
+  @ApiEnvelope(AccessTokenResponseDto, { headers: REFRESH_COOKIE_HEADER })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh-cookie')
@@ -84,6 +98,7 @@ export class AuthController {
     return { access_token: tokens.access_token };
   }
 
+  @ApiEnvelope(MessageResponseDto)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh-cookie')
@@ -103,6 +118,7 @@ export class AuthController {
     return result;
   }
 
+  @ApiEnvelope(MessageResponseDto)
   @Post('refresh/logout')
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh-cookie')

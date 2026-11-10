@@ -1,4 +1,5 @@
 import { ORG_PERMISSIONS } from '@/common/permissions/permission.constants';
+import type { OrganizationRoleResponseDto } from './dto/organization-role-response.dto';
 
 interface OrganizationRoleSource {
   id: string;
@@ -8,7 +9,9 @@ interface OrganizationRoleSource {
 
 // The admin row is never used for permissions (the resolver gives the admin
 // every org key), so the response shows that and marks it read-only.
-export function toOrganizationRoleResponse(row: OrganizationRoleSource) {
+export function toOrganizationRoleResponse(
+  row: OrganizationRoleSource,
+): OrganizationRoleResponseDto {
   const isAdmin = row.role.name === 'admin';
   return {
     id: row.id,

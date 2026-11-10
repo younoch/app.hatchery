@@ -9,7 +9,13 @@ import { RepositoriesModule } from '@/common/repositories/repositories.module';
 import { AuditModule } from '@/common/audit/audit.module';
 
 @Module({
-  imports: [PrismaModule, RoleModule, RepositoriesModule, PermissionsModule, AuditModule],
+  imports: [
+    PrismaModule,
+    RoleModule,
+    RepositoriesModule,
+    PermissionsModule,
+    AuditModule,
+  ],
   providers: [UserService, EmailVerificationRepository],
   controllers: [UserController],
   exports: [UserService],

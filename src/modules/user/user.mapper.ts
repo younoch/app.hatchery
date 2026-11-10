@@ -1,3 +1,5 @@
+import type { UserResponseDto } from './dto/user-response.dto';
+
 export interface UserResponseSource {
   id: string;
   username: string;
@@ -10,7 +12,7 @@ export interface UserResponseSource {
   role: { id: string; name: string } | null;
 }
 
-export function toUserResponse(user: UserResponseSource) {
+export function toUserResponse(user: UserResponseSource): UserResponseDto {
   return {
     id: user.id,
     username: user.username,

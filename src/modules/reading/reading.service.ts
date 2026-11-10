@@ -11,6 +11,7 @@ import { ReadingRepository } from '@/common/repositories/reading.repository';
 import { TankRepository } from '@/common/repositories/tank.repository';
 import { ReadingItemDto } from './dto/reading-item.dto';
 import { SyncReadingsDto } from './dto/sync-readings.dto';
+import type { SyncReadingsResponseDto } from './dto/sync-readings-response.dto';
 
 const RECORDED_AT_FLOOR = new Date('2020-01-01T00:00:00.000Z');
 const RECORDED_AT_FORMAT =
@@ -59,7 +60,10 @@ export class ReadingService {
     );
   }
 
-  async sync(dto: SyncReadingsDto, caller: JwtUser) {
+  async sync(
+    dto: SyncReadingsDto,
+    caller: JwtUser,
+  ): Promise<SyncReadingsResponseDto> {
     if (!caller.isSuperAdmin && !caller.organizationId) {
       throw new AppException(
         HttpStatus.FORBIDDEN,

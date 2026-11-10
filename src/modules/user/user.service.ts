@@ -27,6 +27,7 @@ import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { toUserResponse } from './user.mapper';
+import type { MeResponseDto } from './dto/user-response.dto';
 @Injectable()
 export class UserService {
   constructor(
@@ -190,7 +191,7 @@ export class UserService {
     return this.emailVerificationRepository.findByUserId(userId);
   }
 
-  async getMe(userId: string) {
+  async getMe(userId: string): Promise<MeResponseDto> {
     const user = await this.userRepository.findByIdWithRole(userId);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -229,7 +230,7 @@ export class UserService {
         "The organization's admin cannot be deleted",
       );
     }
-    const deleted = await this.userRepository.deleteUser(userId);
+    await this.userRepository.deleteUser(userId);
     this.adminActionLogger.log({
       action: 'user.delete',
       actorId: currentUserId,
@@ -237,7 +238,7 @@ export class UserService {
       targetId: userId,
       details: { username: target.username },
     });
-    return deleted;
+    return { message: 'User deleted' };
   }
   // A target outside the caller's organization, or a super admin account, is
   // 404, so existence is not revealed.
