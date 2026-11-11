@@ -96,6 +96,8 @@ Naming: `{feature}.controller.ts`, `{feature}.service.ts`, `{entity}.repository.
 * Response shapes are classes named `*ResponseDto` (in the module's `dto/` folder) with `@ApiProperty`. Mappers and services are typed with them (`toTankResponse(...): TankResponseDto`), so the build fails when the code and the documented shape drift apart.
 * Each controller has `@ApiTags(...)`. Each endpoint has its own `@ApiErrors(...codes)` listing only the response-level codes it can really return (typed `ResponseErrorCode`; the HTTP status of each code is in `RESPONSE_ERROR_STATUS` in `common/errors/error-codes.ts`, so a new code is added there first). Shared sets (`ERRORS_SESSION`, `ERRORS_PERMISSION`, `ERRORS_TENANT`, ...) are in `common/swagger/error-sets.ts`. An endpoint with `@AllowMustChangePassword()` also gets `@ApiAllowedWhileMustChangePassword()`.
 * The contract stays in `progress.md`; `/api-json` must say the same. A change to a response shape updates both in the same commit.
+* A numeric limit is one constant (for example `TANK_NAME_MAX`) used by both the validator and `@ApiProperty`; do not write the number twice.
+* `openapi.json` is regenerated with `pnpm swagger:export` and committed together with any change to a request or response shape; `pnpm swagger:check` fails when it is stale.
 
 ### Repository pattern
 

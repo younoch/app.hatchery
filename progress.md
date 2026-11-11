@@ -41,7 +41,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T19 | Production readiness in code: `REFRESH_COOKIE_PATH` (env, default `/auth/refresh`) and `TRUST_PROXY` (hop count, default 0) settings; Swagger (`/api`, `/api-json`) off in production unless `SWAGGER_ENABLED=true`; queues (BullMQ, Redis) and the `/queues` dashboard load only when `EMAIL_ENABLED=true`; `x-powered-by` off (code in commit 06373c5, which also carries a COORDINATION.md row under a frontend commit message) | done | T18 |
 | T20 | `DEPLOY.md` (Render + Neon + Vercel rewrite step by step, production env table, build and start commands, finding the right `TRUST_PROXY`) and a nightly `pg_dump` backup workflow (GitHub Actions); required before real hatchery data enters production | not started | T19 |
 | T21a | Per-endpoint error declarations (F→B-29 items 1 and 4): `@ApiErrors(...codes)` on every endpoint lists only the response-level codes it can return (the status comes from `RESPONSE_ERROR_STATUS` in `error-codes.ts`; the schema narrows `statusCode` and `code` per status); `ErrorCode` and `FieldErrorCode` are named enum schemas; `Retry-After` declared on every 429; the refresh cookie (name, path) on the auth endpoints; `x-works-while-must-change-password` on the endpoints that work while the password is temporary | done | T18, T19 |
-| T21b | Request limits and nullability (F→B-29 items 2 and 3): `recordedAt` date-time, uuid formats, the measurement limits, `maxItems` 100 and `maxLength` 200 as schema constraints, `nullable` and `required` checked on every response DTO; `pnpm swagger:export` writes the committed `openapi.json`, because Swagger is off in production | not started | T21a |
+| T21b | Request limits and nullability (F→B-29 items 2 and 3): limits live in shared constants used by both the validators and `@ApiProperty` (`recordedAt` date-time, uuid formats, the measurement limits, `maxItems` 100, `maxLength` 200, name and password lengths), `nullable` and `required` checked on every response DTO; the Swagger setup moves to `src/swagger.ts`; `pnpm swagger:export` writes the committed `openapi.json` without a database (Swagger is off in production) and `pnpm swagger:check` fails when it is stale | not started | T21a |
 ## API contract
 
 Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status": **implemented** = exists today; **planned** = decided, task in brackets. Organization-scoped endpoints take `organizationId` (query for GET, body for POST) from the **super admin only** (required); everyone else uses their own organization.
@@ -76,6 +76,18 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 Pagination (inside `data`): `{ "items": [], "meta": { "total", "page", "pageSize", "totalPages", "hasNextPage" } }`. Defaults: `page=1`, `pageSize=10`.
 
 Error envelope: see `AGENTS.md` → Error contract. Today: `{ success:false, statusCode, path, message, timestamp }`.
+
+### Validation rules (T21b)
+
+The same numbers are declared in `/api-json` and `openapi.json`. The frontend does not copy these rules; it trims, lowercases and leaves the rest to the backend answer.
+
+* `username`: lowercased and trimmed first; `a-z 0-9 . _ -`, 3–30 characters (`invalid_username`).
+* New passwords (`temporaryPassword`, `newPassword`): at least 6 characters (`too_short { min: 6 }`) with at least one letter and one number (`weak_password`). `POST /auth/login` also wants 6 or more characters in `password`, so a shorter one answers 400 `validation_failed` (`too_short`) and not 401 `invalid_credentials`.
+* `email`: a valid address, lowercased and trimmed.
+* User `name`: optional, at most 100 characters. Organization `name`: trimmed, 1–100. Tank `name`: trimmed, 1–50. Role `name`: at least 2.
+* Role and organization-role `permissions`: only organization-level keys (`not_allowed`).
+* Lists: `page` 1 or more (default 1), `pageSize` 1–100 (default 10).
+* Readings sync: 1–100 items per call; the item rules are in the next section.
 
 ### Readings sync (T15)
 
@@ -188,6 +200,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-10: Pilot hosting: backend on Render's free web service, database on Neon's free Postgres (Render's own free Postgres expires after 30 days), frontend on Vercel Hobby, no domain yet. The browser talks only to the Vercel origin: the frontend proxies `/api/*` to the backend with a Vercel rewrite, so the refresh cookie is first-party (`SameSite=lax`, no CORS needed) and `REFRESH_COOKIE_PATH` becomes `/api/auth/refresh`. Cross-site cookies (`SameSite=none` between `vercel.app` and `onrender.com`) are rejected because some browsers block them. Render has no shell, so migrations and the seed run in the build step (`prisma migrate deploy`, `prisma db seed`; the seed is idempotent). Render's free tier is not meant for production (its docs say so) and sleeps after 15 minutes (about a minute to wake); that is acceptable for the pilot because sync is offline-first, but the first request after a sleep can be slow and the frontend must retry. Real hatchery data waits for the nightly backup (T20). Configuration stays in environment variables only, so a move to a dedicated VPS is a data restore plus an env change. Redis is not deployed: queues and the `/queues` dashboard (which has no login) load only when `EMAIL_ENABLED=true`. Swagger is off in production unless `SWAGGER_ENABLED=true`.
 * 2026-11-11: T19 verified on a real server: no Redis needed with email off, `/queues` answers 404, the refresh cookie path and `TRUST_PROXY` follow their settings (65 refresh calls with different `X-Forwarded-For`: 5 answers 429 with `TRUST_PROXY=0`, none with `1`), Swagger answers 404 when `SWAGGER_ENABLED=false`. F→B-29 is accepted as T21, done before T20 because the frontend's Step 21d waits for it. The sync limit is 100 items (not the 20 that F→B-29 assumed).
 * 2026-11-11: T21 is split. T21a (error declarations, `Retry-After`, cookie, the must-change-password marker) comes first because the frontend's Step 21d waits for it; T21b (request limits, nullability, exported `openapi.json`) follows before Step 21. `@ApiErrors` takes only response-level codes (typed `ResponseErrorCode`); field-level codes are in `errors[]` (`FieldErrorCode`).
+* 2026-11-11: T21b design. Numeric limits live in one shared constant per module (for example `TANK_NAME_MAX`, the reading `LIMITS`) that both the validator and `@ApiProperty` use, so the code and the schema cannot drift apart. The Swagger setup moves to `src/swagger.ts` and `main.ts` and the export script share it. `pnpm swagger:export` builds the document in preview mode (no database) and writes `openapi.json`; `pnpm swagger:check` fails when the file is stale. The frontend reads `openapi.json` (the owner copies it, like `COORDINATION.md`). New "Validation rules" section in the API contract; the new-password minimum is 6 today (the seed script wants 8): see Open decisions #4.
 
 ## Open decisions
 
@@ -196,6 +209,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | 1 | Real hatchery value ranges (pH, temperature, salinity, oxygen) for review flags — the frontend's sample ranges are not confirmed | before `needsReview` is ever built |
 | 2 | Mail provider and the day email is switched on (Brevo free tier is the candidate; needs a domain with SPF/DKIM) | when admins stop being able to handle resets |
 | 3 | Whether to bring back `ReadingAudit` + PATCH | before the dashboard |
+| 4 | Minimum length for new passwords: 6 today (plus a letter and a number); the seed script already demands 8. Raise the API to 8 for `temporaryPassword` and `newPassword` (login keeps accepting 6 or more, so existing accounts still sign in)? | before real users are created |
 
 ## Parking lot
 
@@ -228,3 +242,4 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * A wrong current password on `PATCH /users/me/password` answers 403 with the generic `permission_denied`; a dedicated code (for example `invalid_current_password`) would be clearer, but it changes the contract for the frontend
 ### Repository pattern
 * Protect the `/queues` dashboard with a login before email is switched on in production
+* `includeDeleted` appears in every paginated list query (from the boilerplate) although nothing is soft-deleted; remove it from `PaginationQueryDto` when the lists are next touched
