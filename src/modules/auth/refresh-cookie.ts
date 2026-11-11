@@ -11,7 +11,7 @@ export function refreshCookieOptions(
     secure: configService.get<boolean>('cookieSecure') ?? false,
     sameSite:
       configService.get<'strict' | 'lax' | 'none'>('cookieSameSite') ?? 'lax',
-    path: REFRESH_COOKIE_PATH,
+    path: configService.get<string>('refreshCookiePath') ?? REFRESH_COOKIE_PATH,
     ...(includeMaxAge
       ? { maxAge: configService.get<number>('refreshTokenTtlMs') }
       : {}),

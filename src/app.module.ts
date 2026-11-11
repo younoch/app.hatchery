@@ -7,6 +7,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
+import { QUEUES_ENABLED } from './common/bullmq/queues-enabled';
 
 import { AppThrottlerGuard } from '@/common/throttler/app-throttler.guard';
 import { createThrottlerOptions } from '@/common/throttler/throttler.config';
@@ -78,14 +79,18 @@ import { HealthModule } from '@/modules/health/health.module';
       }),
     }),
     ScheduleModule.forRoot(),
-    BullBoardModule.forRoot({
-      route: '/queues',
-      adapter: ExpressAdapter,
-    }),
+    ...(QUEUES_ENABLED
+      ? [
+          BullBoardModule.forRoot({
+            route: '/queues',
+            adapter: ExpressAdapter,
+          }),
+        ]
+      : []),
 
     PrismaModule,
     HealthModule,
-    BullmqModule,
+    ...(QUEUES_ENABLED ? [BullmqModule] : []),
     AuthModule,
     UserModule,
     OrganizationModule,

@@ -16,6 +16,7 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { RepositoriesModule } from '@/common/repositories/repositories.module';
 import { PrismaModule } from '@/common/prisma/prisma.module';
 import { AuditModule } from '@/common/audit/audit.module';
+import { QUEUES_ENABLED } from '@/common/bullmq/queues-enabled';
 
 @Module({
   imports: [
@@ -39,15 +40,21 @@ import { AuditModule } from '@/common/audit/audit.module';
         };
       },
     }),
-    BullModule.registerQueue({
-      name: 'email-verification',
-    }),
-    BullBoardModule.forFeature({
-      name: 'email-verification',
-      adapter: BullMQAdapter,
-    }),
+    ...(QUEUES_ENABLED
+      ? [
+          BullModule.registerQueue({ name: 'email-verification' }),
+          BullBoardModule.forFeature({
+            name: 'email-verification',
+            adapter: BullMQAdapter,
+          }),
+        ]
+      : []),
   ],
-  providers: [AuthService, JwtStrategy, EmailVerificationProcessor],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    ...(QUEUES_ENABLED ? [EmailVerificationProcessor] : []),
+  ],
   controllers: [AuthController, AccountController],
 })
 export class AuthModule {}

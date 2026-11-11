@@ -13,6 +13,12 @@ export default () => ({
       ? process.env.NODE_ENV === 'production'
       : process.env.COOKIE_SECURE === 'true',
   cookieSameSite: process.env.COOKIE_SAME_SITE || 'lax',
+  refreshCookiePath: process.env.REFRESH_COOKIE_PATH || '/auth/refresh',
+  trustProxy: parseInt(process.env.TRUST_PROXY || '0', 10),
+  swaggerEnabled:
+    process.env.SWAGGER_ENABLED === undefined
+      ? process.env.NODE_ENV !== 'production'
+      : process.env.SWAGGER_ENABLED === 'true',
   refreshTokenTtlMs: parseInt(
     process.env.REFRESH_TOKEN_TTL_MS || '1209600000',
     10,
