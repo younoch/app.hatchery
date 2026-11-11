@@ -94,7 +94,7 @@ Naming: `{feature}.controller.ts`, `{feature}.service.ts`, `{entity}.repository.
 
 * Every endpoint declares what it returns: `@ApiEnvelope(Dto)`, `@ApiEnvelope(Dto, { isArray: true })` or `@ApiPaginatedEnvelope(Dto)` from `common/swagger/api-envelope.ts`. They describe `Dto` inside the `{ success, statusCode, data, timestamp }` envelope. The default status is 200; pass `{ status: 201 }` for creates.
 * Response shapes are classes named `*ResponseDto` (in the module's `dto/` folder) with `@ApiProperty`. Mappers and services are typed with them (`toTankResponse(...): TankResponseDto`), so the build fails when the code and the documented shape drift apart.
-* Each controller has `@ApiTags(...)` and one `@ApiErrors(...)` (the error envelope, `ErrorResponseDto`; the code list is in `progress.md`).
+* Each controller has `@ApiTags(...)`. Each endpoint has its own `@ApiErrors(...codes)` listing only the response-level codes it can really return (typed `ResponseErrorCode`; the HTTP status of each code is in `RESPONSE_ERROR_STATUS` in `common/errors/error-codes.ts`, so a new code is added there first). Shared sets (`ERRORS_SESSION`, `ERRORS_PERMISSION`, `ERRORS_TENANT`, ...) are in `common/swagger/error-sets.ts`. An endpoint with `@AllowMustChangePassword()` also gets `@ApiAllowedWhileMustChangePassword()`.
 * The contract stays in `progress.md`; `/api-json` must say the same. A change to a response shape updates both in the same commit.
 
 ### Repository pattern
