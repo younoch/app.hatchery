@@ -25,12 +25,13 @@ import { refreshCookieOptions } from './refresh-cookie';
 import {
   ApiEnvelope,
   ApiErrors,
+  REFRESH_COOKIE_CLEARED_HEADER,
   REFRESH_COOKIE_HEADER,
 } from '@/common/swagger/api-envelope';
+import { ERRORS_PUBLIC } from '@/common/swagger/error-sets';
 import { MessageResponseDto } from '@/common/swagger/message-response.dto';
 import { AccessTokenResponseDto } from './dto/auth-response.dto';
 @ApiTags('Auth')
-@ApiErrors(400, 401, 429, 503)
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -39,6 +40,12 @@ export class AuthController {
   ) {}
 
   @ApiEnvelope(AccessTokenResponseDto, { headers: REFRESH_COOKIE_HEADER })
+  @ApiErrors(
+    ...ERRORS_PUBLIC,
+    'validation_failed',
+    'invalid_credentials',
+    'user_inactive',
+  )
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -55,6 +62,12 @@ export class AuthController {
   }
   @UseGuards(EmailEnabledGuard)
   @ApiEnvelope(MessageResponseDto)
+  @ApiErrors(
+    ...ERRORS_PUBLIC,
+    'email_disabled',
+    'validation_failed',
+    'bad_request',
+  )
   @Get('verify-email')
   verifyEmail(@Query() query: VerifyEmailDto) {
     return this.authService.verifyEmail(query.token);
@@ -62,6 +75,7 @@ export class AuthController {
 
   @UseGuards(EmailEnabledGuard)
   @ApiEnvelope(MessageResponseDto, { status: 201 })
+  @ApiErrors(...ERRORS_PUBLIC, 'email_disabled', 'validation_failed')
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
@@ -69,12 +83,24 @@ export class AuthController {
 
   @UseGuards(EmailEnabledGuard)
   @ApiEnvelope(MessageResponseDto, { status: 201 })
+  @ApiErrors(
+    ...ERRORS_PUBLIC,
+    'email_disabled',
+    'validation_failed',
+    'bad_request',
+  )
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword);
   }
 
   @ApiEnvelope(AccessTokenResponseDto, { headers: REFRESH_COOKIE_HEADER })
+  @ApiErrors(
+    ...ERRORS_PUBLIC,
+    'unauthorized',
+    'user_inactive',
+    'session_revoked',
+  )
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh-cookie')
@@ -99,6 +125,7 @@ export class AuthController {
   }
 
   @ApiEnvelope(MessageResponseDto)
+  @ApiErrors(...ERRORS_PUBLIC)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh-cookie')
@@ -118,7 +145,8 @@ export class AuthController {
     return result;
   }
 
-  @ApiEnvelope(MessageResponseDto)
+  @ApiEnvelope(MessageResponseDto, { headers: REFRESH_COOKIE_CLEARED_HEADER })
+  @ApiErrors(...ERRORS_PUBLIC)
   @Post('refresh/logout')
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh-cookie')

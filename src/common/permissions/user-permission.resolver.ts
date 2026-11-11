@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { UserRepository } from '@/common/repositories/user.repository';
 import { OrganizationRoleRepository } from '@/common/repositories/organization-role.repository';
-import { PERMISSIONS, ORG_PERMISSIONS } from '@/common/permissions/permission.constants';
+import {
+  PERMISSIONS,
+  ORG_PERMISSIONS,
+} from '@/common/permissions/permission.constants';
 
 @Injectable()
 export class UserPermissionResolver {

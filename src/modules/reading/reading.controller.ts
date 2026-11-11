@@ -16,11 +16,11 @@ import { ReadingService } from './reading.service';
 import { SyncReadingsDto } from './dto/sync-readings.dto';
 import { ApiEnvelope, ApiErrors } from '@/common/swagger/api-envelope';
 import { SyncReadingsResponseDto } from './dto/sync-readings-response.dto';
+import { ERRORS_PERMISSION } from '@/common/swagger/error-sets';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @ApiTags('Readings')
-@ApiErrors(400, 401, 403, 429)
 @Controller('readings')
 export class ReadingController {
   constructor(private readonly readingService: ReadingService) {}
@@ -29,6 +29,12 @@ export class ReadingController {
   @UseGuards(PermissionsGuard)
   @HttpCode(HttpStatus.OK)
   @ApiEnvelope(SyncReadingsResponseDto)
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'no_organization',
+    'validation_failed',
+    'payload_too_large',
+  )
   @Post('sync')
   sync(@Body() dto: SyncReadingsDto, @CurrentUser() currentUser: JwtUser) {
     return this.readingService.sync(dto, currentUser);

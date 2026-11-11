@@ -24,22 +24,29 @@ import { AllowMustChangePassword } from '@/common/decorators/allow-must-change-p
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import {
+  ApiAllowedWhileMustChangePassword,
   ApiEnvelope,
   ApiErrors,
   ApiPaginatedEnvelope,
 } from '@/common/swagger/api-envelope';
+import {
+  ERRORS_PERMISSION,
+  ERRORS_SESSION_TEMP_PASSWORD_OK,
+  ERRORS_TENANT,
+} from '@/common/swagger/error-sets';
 import { MessageResponseDto } from '@/common/swagger/message-response.dto';
 import { MeResponseDto, UserResponseDto } from './dto/user-response.dto';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @ApiTags('Users')
-@ApiErrors(400, 401, 403, 404, 409, 429)
 @Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
   @AllowMustChangePassword()
   @ApiEnvelope(MeResponseDto)
+  @ApiAllowedWhileMustChangePassword()
+  @ApiErrors(...ERRORS_SESSION_TEMP_PASSWORD_OK)
   @Get('me')
   getProfile(@CurrentUser() user: JwtUser) {
     return this.userService.getMe(user.userId);
@@ -48,6 +55,7 @@ export class UserController {
   @RequirePermission('user:read')
   @UseGuards(PermissionsGuard)
   @ApiPaginatedEnvelope(UserResponseDto)
+  @ApiErrors(...ERRORS_PERMISSION, ...ERRORS_TENANT, 'validation_failed')
   @Get()
   async listUsers(
     @Query() query: ListUsersQueryDto,
@@ -59,6 +67,14 @@ export class UserController {
   @RequirePermission('user:create')
   @UseGuards(PermissionsGuard)
   @ApiEnvelope(UserResponseDto, { status: 201 })
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    ...ERRORS_TENANT,
+    'validation_failed',
+    'bad_request',
+    'username_taken',
+    'email_taken',
+  )
   @Post()
   async createUser(
     @Body() dto: CreateUserDto,
@@ -70,6 +86,12 @@ export class UserController {
   @RequirePermission('user:delete')
   @UseGuards(PermissionsGuard)
   @ApiEnvelope(MessageResponseDto)
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'cannot_target_self',
+    'not_found',
+    'org_admin_protected',
+  )
   @Delete(':id')
   async deleteUser(
     @Param('id') id: string,
@@ -81,6 +103,14 @@ export class UserController {
   @RequirePermission('user:write')
   @UseGuards(PermissionsGuard)
   @ApiEnvelope(UserResponseDto)
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'validation_failed',
+    'bad_request',
+    'cannot_target_self',
+    'org_admin_protected',
+    'not_found',
+  )
   @Patch(':id')
   async updateUser(
     @Param('id') id: string,
@@ -94,6 +124,12 @@ export class UserController {
   @UseGuards(PermissionsGuard)
   @HttpCode(HttpStatus.OK)
   @ApiEnvelope(MessageResponseDto)
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'validation_failed',
+    'cannot_target_self',
+    'not_found',
+  )
   @Post(':id/reset-password')
   async resetPassword(
     @Param('id') id: string,

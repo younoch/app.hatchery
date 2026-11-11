@@ -1,10 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ErrorCode, FIELD_ERROR_CODES } from '@/common/errors/error-codes';
 
 export class FieldErrorDto {
   @ApiProperty({ example: 'name' })
   field: string;
 
-  @ApiProperty({ example: 'required' })
+  @ApiProperty({
+    enum: [...FIELD_ERROR_CODES],
+    enumName: 'FieldErrorCode',
+    example: 'required',
+  })
   code: string;
 
   @ApiPropertyOptional({
@@ -22,7 +27,11 @@ export class ErrorResponseDto {
   @ApiProperty({ example: 400 })
   statusCode: number;
 
-  @ApiProperty({ example: 'validation_failed' })
+  @ApiProperty({
+    enum: Object.values(ErrorCode),
+    enumName: 'ErrorCode',
+    example: 'validation_failed',
+  })
   code: string;
 
   @ApiProperty({ example: '/tanks' })

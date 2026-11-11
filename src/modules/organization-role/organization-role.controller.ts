@@ -18,17 +18,22 @@ import { ListOrganizationRolesQueryDto } from './dto/list-organization-roles-que
 import { UpdateOrganizationRoleDto } from './dto/update-organization-role.dto';
 import { ApiEnvelope, ApiErrors } from '@/common/swagger/api-envelope';
 import { OrganizationRoleResponseDto } from './dto/organization-role-response.dto';
+import {
+  ERRORS_PERMISSION,
+  ERRORS_SESSION,
+  ERRORS_TENANT,
+} from '@/common/swagger/error-sets';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @ApiTags('Organization roles')
-@ApiErrors(400, 401, 403, 404, 429)
 @Controller('organization-roles')
 export class OrganizationRoleController {
   constructor(private readonly service: OrganizationRoleService) {}
 
   // Any member of the organization may read; no permission key.
   @ApiEnvelope(OrganizationRoleResponseDto, { isArray: true })
+  @ApiErrors(...ERRORS_SESSION, ...ERRORS_TENANT, 'validation_failed')
   @Get()
   list(
     @Query() query: ListOrganizationRolesQueryDto,
@@ -40,6 +45,7 @@ export class OrganizationRoleController {
   @RequirePermission('organization-role:write')
   @UseGuards(PermissionsGuard)
   @ApiEnvelope(OrganizationRoleResponseDto)
+  @ApiErrors(...ERRORS_PERMISSION, 'validation_failed', 'not_found')
   @Patch(':id')
   update(
     @Param('id') id: string,

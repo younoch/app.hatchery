@@ -62,3 +62,49 @@ export function codeFromStatus(status: number): ErrorCode {
       return ErrorCode.INTERNAL_ERROR;
   }
 }
+
+// The `code` of an entry in `errors[]`; the readings sync also uses the last three per item.
+export const FIELD_ERROR_CODES = [
+  ErrorCode.REQUIRED,
+  ErrorCode.INVALID_TYPE,
+  ErrorCode.INVALID_FORMAT,
+  ErrorCode.TOO_SHORT,
+  ErrorCode.TOO_LONG,
+  ErrorCode.OUT_OF_RANGE,
+  ErrorCode.INVALID_UUID,
+  ErrorCode.INVALID_DATETIME,
+  ErrorCode.NOT_ALLOWED,
+  ErrorCode.WEAK_PASSWORD,
+  ErrorCode.INVALID_USERNAME,
+  ErrorCode.TANK_NOT_FOUND,
+  ErrorCode.ID_CONFLICT,
+  ErrorCode.RECORDED_AT_IN_FUTURE,
+] as const;
+
+// Response-level codes and the HTTP status each one comes with (used by Swagger).
+export const RESPONSE_ERROR_STATUS = {
+  validation_failed: 400,
+  bad_request: 400,
+  organization_required: 400,
+  unauthorized: 401,
+  invalid_credentials: 401,
+  user_inactive: 401,
+  session_revoked: 401,
+  must_change_password: 403,
+  permission_denied: 403,
+  no_organization: 403,
+  organization_mismatch: 403,
+  not_found: 404,
+  tank_not_found: 404,
+  org_admin_protected: 409,
+  cannot_target_self: 409,
+  username_taken: 409,
+  email_taken: 409,
+  tank_name_taken: 409,
+  conflict: 409,
+  payload_too_large: 413,
+  rate_limited: 429,
+  email_disabled: 503,
+} as const satisfies Partial<Record<ErrorCode, number>>;
+
+export type ResponseErrorCode = keyof typeof RESPONSE_ERROR_STATUS;

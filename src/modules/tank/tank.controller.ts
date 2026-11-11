@@ -20,16 +20,21 @@ import { CreateTankDto } from './dto/create-tank.dto';
 import { UpdateTankDto } from './dto/update-tank.dto';
 import { ApiEnvelope, ApiErrors } from '@/common/swagger/api-envelope';
 import { TankResponseDto } from './dto/tank-response.dto';
+import {
+  ERRORS_PERMISSION,
+  ERRORS_SESSION,
+  ERRORS_TENANT,
+} from '@/common/swagger/error-sets';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @ApiTags('Tanks')
-@ApiErrors(400, 401, 403, 404, 409, 429)
 @Controller('tanks')
 export class TankController {
   constructor(private readonly tankService: TankService) {}
 
   @ApiEnvelope(TankResponseDto, { isArray: true })
+  @ApiErrors(...ERRORS_SESSION, ...ERRORS_TENANT, 'validation_failed')
   @Get()
   list(@Query() query: ListTanksQueryDto, @CurrentUser() currentUser: JwtUser) {
     return this.tankService.list(currentUser, query.organizationId);
@@ -38,6 +43,12 @@ export class TankController {
   @RequirePermission('tank:create')
   @UseGuards(PermissionsGuard)
   @ApiEnvelope(TankResponseDto, { status: 201 })
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    ...ERRORS_TENANT,
+    'validation_failed',
+    'tank_name_taken',
+  )
   @Post()
   create(@Body() dto: CreateTankDto, @CurrentUser() currentUser: JwtUser) {
     return this.tankService.create(dto, currentUser);
@@ -46,6 +57,13 @@ export class TankController {
   @RequirePermission('tank:write')
   @UseGuards(PermissionsGuard)
   @ApiEnvelope(TankResponseDto)
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'validation_failed',
+    'bad_request',
+    'tank_not_found',
+    'tank_name_taken',
+  )
   @Patch(':id')
   update(
     @Param('id') id: string,

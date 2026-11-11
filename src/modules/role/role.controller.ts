@@ -15,16 +15,17 @@ import { RoleService } from './role.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { ApiEnvelope, ApiErrors } from '@/common/swagger/api-envelope';
 import { RoleResponseDto } from './dto/role-response.dto';
+import { ERRORS_PERMISSION } from '@/common/swagger/error-sets';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @ApiTags('Roles')
-@ApiErrors(400, 401, 403, 404, 409, 429)
 @Controller('roles')
 export class RoleController {
   constructor(private readonly roleService: RoleService) {}
 
   @ApiEnvelope(RoleResponseDto, { isArray: true })
+  @ApiErrors(...ERRORS_PERMISSION)
   @Get()
   @RequirePermission('role:read')
   @UseGuards(PermissionsGuard)
@@ -33,6 +34,7 @@ export class RoleController {
   }
 
   @ApiEnvelope(RoleResponseDto, { status: 201 })
+  @ApiErrors(...ERRORS_PERMISSION, 'validation_failed', 'conflict')
   @Post()
   @RequirePermission('role:create')
   @UseGuards(PermissionsGuard)
@@ -41,6 +43,7 @@ export class RoleController {
   }
 
   @ApiEnvelope(RoleResponseDto)
+  @ApiErrors(...ERRORS_PERMISSION, 'validation_failed', 'not_found', 'conflict')
   @Patch(':id')
   @RequirePermission('role:write')
   @UseGuards(PermissionsGuard)

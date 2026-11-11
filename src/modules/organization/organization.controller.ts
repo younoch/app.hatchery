@@ -22,6 +22,7 @@ import {
   ApiPaginatedEnvelope,
 } from '@/common/swagger/api-envelope';
 import { MessageResponseDto } from '@/common/swagger/message-response.dto';
+import { ERRORS_PERMISSION } from '@/common/swagger/error-sets';
 import {
   OrganizationCreatedDto,
   OrganizationListItemDto,
@@ -33,13 +34,18 @@ import { TransferAdminDto } from './dto/transfer-admin.dto';
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiTags('Organizations')
-@ApiErrors(400, 401, 403, 404, 409, 429)
 @Controller('organizations')
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
   @RequirePermission('organization:create')
   @ApiEnvelope(OrganizationCreatedDto, { status: 201 })
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'validation_failed',
+    'username_taken',
+    'email_taken',
+  )
   @Post()
   create(
     @Body() dto: CreateOrganizationDto,
@@ -50,6 +56,7 @@ export class OrganizationController {
 
   @RequirePermission('organization:read')
   @ApiPaginatedEnvelope(OrganizationListItemDto)
+  @ApiErrors(...ERRORS_PERMISSION, 'validation_failed')
   @Get()
   list(@Query() query: PaginationQueryDto) {
     return this.organizationService.list(query);
@@ -57,6 +64,13 @@ export class OrganizationController {
 
   @RequirePermission('organization:transfer-admin')
   @ApiEnvelope(MessageResponseDto)
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'validation_failed',
+    'bad_request',
+    'not_found',
+    'conflict',
+  )
   @Post(':id/transfer-admin')
   @HttpCode(HttpStatus.OK)
   transferAdmin(

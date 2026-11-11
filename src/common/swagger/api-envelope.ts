@@ -1,10 +1,16 @@
 import { applyDecorators, Type } from '@nestjs/common';
 import {
+  ApiExtension,
   ApiExtraModels,
+  ApiOperation,
   ApiResponse,
   ApiResponseOptions,
   getSchemaPath,
 } from '@nestjs/swagger';
+import {
+  RESPONSE_ERROR_STATUS,
+  type ResponseErrorCode,
+} from '@/common/errors/error-codes';
 import { ErrorResponseDto } from './error-response.dto';
 import { PaginationMetaDto } from './pagination-meta.dto';
 
@@ -17,19 +23,35 @@ interface EnvelopeOptions {
 
 export const REFRESH_COOKIE_HEADER: ApiResponseOptions['headers'] = {
   'Set-Cookie': {
-    description: 'refresh_token cookie (httpOnly, Path /auth/refresh, 14 days)',
+    description:
+      'Sets the refresh_token cookie: httpOnly, 14 days, Path /auth/refresh (the REFRESH_COOKIE_PATH setting; /api/auth/refresh behind the Vercel rewrite)',
     schema: { type: 'string' },
   },
 };
 
-const ERROR_DESCRIPTIONS: Record<number, string> = {
-  400: 'Validation failed or bad request (validation_failed, bad_request, organization_required)',
-  401: 'Missing or invalid token, wrong credentials or ended session (unauthorized, invalid_credentials, user_inactive, session_revoked)',
-  403: 'Permission or tenant rule (permission_denied, no_organization, organization_mismatch, must_change_password)',
-  404: 'Not found, or outside your organization (not_found, tank_not_found)',
-  409: 'Conflict (username_taken, email_taken, tank_name_taken, org_admin_protected, cannot_target_self, conflict)',
-  429: 'Rate limited; see the Retry-After header (rate_limited)',
-  503: 'Email features are switched off (email_disabled)',
+export const REFRESH_COOKIE_CLEARED_HEADER: ApiResponseOptions['headers'] = {
+  'Set-Cookie': {
+    description: 'Clears the refresh_token cookie (same Path)',
+    schema: { type: 'string' },
+  },
+};
+
+const RETRY_AFTER_HEADER: ApiResponseOptions['headers'] = {
+  'Retry-After': {
+    description: 'Seconds to wait before the next request',
+    schema: { type: 'integer' },
+  },
+};
+
+const STATUS_DESCRIPTIONS: Record<number, string> = {
+  400: 'Bad request',
+  401: 'Not signed in',
+  403: 'Not allowed',
+  404: 'Not found',
+  409: 'Conflict',
+  413: 'Request body too large',
+  429: 'Rate limited',
+  503: 'Email features are switched off',
 };
 
 function envelopeSchema(data: Record<string, unknown>, status: number) {
@@ -92,14 +114,43 @@ export const ApiPaginatedEnvelope = (
   );
 };
 
-export const ApiErrors = (...statuses: number[]) =>
-  applyDecorators(
+// Lists only the codes the endpoint can really return, grouped by HTTP status.
+export const ApiErrors = (...codes: ResponseErrorCode[]) => {
+  const byStatus = new Map<number, ResponseErrorCode[]>();
+  for (const code of new Set(codes)) {
+    const status = RESPONSE_ERROR_STATUS[code];
+    byStatus.set(status, [...(byStatus.get(status) ?? []), code]);
+  }
+  return applyDecorators(
     ApiExtraModels(ErrorResponseDto),
-    ...statuses.map((status) =>
-      ApiResponse({
-        status,
-        description: ERROR_DESCRIPTIONS[status] ?? 'Error',
-        type: ErrorResponseDto,
-      }),
-    ),
+    ...[...byStatus]
+      .sort(([a], [b]) => a - b)
+      .map(([status, statusCodes]) =>
+        ApiResponse({
+          status,
+          description: `${STATUS_DESCRIPTIONS[status]}: ${statusCodes.join(', ')}`,
+          headers: status === 429 ? RETRY_AFTER_HEADER : undefined,
+          schema: {
+            allOf: [
+              { $ref: getSchemaPath(ErrorResponseDto) },
+              {
+                type: 'object',
+                properties: {
+                  statusCode: { type: 'integer', enum: [status] },
+                  code: { type: 'string', enum: statusCodes },
+                },
+              },
+            ],
+          },
+        }),
+      ),
+  );
+};
+
+export const ApiAllowedWhileMustChangePassword = () =>
+  applyDecorators(
+    ApiOperation({
+      description: 'Works while `mustChangePassword` is true.',
+    }),
+    ApiExtension('x-works-while-must-change-password', true),
   );
