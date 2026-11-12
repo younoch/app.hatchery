@@ -105,7 +105,7 @@ Every variable the code reads is validated at startup in `src/config/env.validat
 | `PASSWORD_RESET_EXPIRATION` | — | `15` | Minutes; only used when email is enabled |
 | `READING_FUTURE_TOLERANCE_MS` | — | `600000` | Used by `POST /readings/sync`: how far in the future `recordedAt` may be |
 | `LOG_LEVEL` | — | `info` | `fatal`, `error`, `warn`, `info`, `debug` or `trace` |
-| `SEED_SUPER_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | yes for `pnpm prisma db seed` | — | Read only by `prisma/seed.ts` (not by the app). Username: 3–30 chars `a-z 0-9 . _ -`; password at least 8 chars with a letter and a number (the seed's own rule; the API accepts 6 or more for new passwords, see Open decisions #4) |
+| `SEED_SUPER_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | yes for `pnpm prisma db seed` | — | Read only by `prisma/seed.ts` (not by the app). Username: 3–30 chars `a-z 0-9 . _ -`; password at least 8 chars with a letter and a number (the seed's own rule; the API accepts 6 to 72 characters for new passwords) |
 
 Run migrations:
 

@@ -4,7 +4,7 @@
 
 Implemented (T2–T18): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging, Swagger response schemas. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): the deployment guide and backups (T20).
+Not implemented (marked **planned** below): the password maximum (T22), the deployment guide and backups (T20).
 
 Known bugs today:
 
@@ -42,6 +42,8 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T20 | `DEPLOY.md` (Render + Neon + Vercel rewrite step by step, production env table, build and start commands, finding the right `TRUST_PROXY`) and a nightly `pg_dump` backup workflow (GitHub Actions); required before real hatchery data enters production | not started | T19 |
 | T21a | Per-endpoint error declarations (F→B-29 items 1 and 4): `@ApiErrors(...codes)` on every endpoint lists only the response-level codes it can return (the status comes from `RESPONSE_ERROR_STATUS` in `error-codes.ts`; the schema narrows `statusCode` and `code` per status); `ErrorCode` and `FieldErrorCode` are named enum schemas; `Retry-After` declared on every 429; the refresh cookie (name, path) on the auth endpoints; `x-works-while-must-change-password` on the endpoints that work while the password is temporary | done | T18, T19 |
 | T21b | Request limits and nullability (F→B-29 items 2 and 3): limits live in shared constants used by both the validators and `@ApiProperty` (`recordedAt` date-time, uuid formats, the measurement limits, `maxItems` 100, `maxLength` 200, name and password lengths), `nullable` and `required` checked on every response DTO; the Swagger setup moves to `src/swagger.ts`; `pnpm swagger:export` writes the committed `openapi.json` without a database (Swagger is off in production) and `pnpm swagger:check` fails when it is stale | done | T21a |
+| T22 | Password maximum (Open decision #4): new passwords are 6 to 72 characters, with a letter and a number as before; `PASSWORD_MAX` in `limits.ts`, enforced inside `IsCustomStrongPassword()` and declared as `maxLength` in the schema; login keeps no maximum | not started | T21b |
+
 ## API contract
 
 Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status": **implemented** = exists today; **planned** = decided, task in brackets. Organization-scoped endpoints take `organizationId` (query for GET, body for POST) from the **super admin only** (required); everyone else uses their own organization.
@@ -82,7 +84,7 @@ Error envelope: see `AGENTS.md` → Error contract. Today: `{ success:false, sta
 The same numbers are declared in `/api-json` and `openapi.json`. The frontend does not copy these rules; it trims, lowercases and leaves the rest to the backend answer.
 
 * `username`: lowercased and trimmed first; `a-z 0-9 . _ -`, 3–30 characters (`invalid_username`).
-* New passwords (`temporaryPassword`, `newPassword`): at least 6 characters (`too_short { min: 6 }`) with at least one letter and one number (`weak_password`). `POST /auth/login` also wants 6 or more characters in `password`, so a shorter one answers 400 `validation_failed` (`too_short`) and not 401 `invalid_credentials`.
+* New passwords (`temporaryPassword`, `newPassword`): 6 to 72 characters (`too_short { min: 6 }`, `too_long { max: 72 }`) with at least one letter and one number (`weak_password`). 72 is bcrypt's limit: it silently ignores anything past 72 bytes, so a longer limit would give a false sense of strength. `POST /auth/login` wants 6 or more characters in `password` and has no maximum, so a shorter one answers 400 `validation_failed` (`too_short`) and not 401 `invalid_credentials`, and an account with an older, longer password can still sign in.
 * `email`: a valid address, lowercased and trimmed.
 * User `name`: optional, at most 100 characters. Organization `name`: trimmed, 1–100. Tank `name`: trimmed, 1–50. Role `name`: at least 2.
 * Role and organization-role `permissions`: only organization-level keys (`not_allowed`).
@@ -202,6 +204,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-11: T21 is split. T21a (error declarations, `Retry-After`, cookie, the must-change-password marker) comes first because the frontend's Step 21d waits for it; T21b (request limits, nullability, exported `openapi.json`) follows before Step 21. `@ApiErrors` takes only response-level codes (typed `ResponseErrorCode`); field-level codes are in `errors[]` (`FieldErrorCode`).
 * 2026-11-11: T21b design. Numeric limits live in one shared constant per module (for example `TANK_NAME_MAX`, the reading `LIMITS`) that both the validator and `@ApiProperty` use, so the code and the schema cannot drift apart. The Swagger setup moves to `src/swagger.ts` and `main.ts` and the export script share it. `pnpm swagger:export` builds the document in preview mode (no database) and writes `openapi.json`; `pnpm swagger:check` fails when the file is stale. The frontend reads `openapi.json` (the owner copies it, like `COORDINATION.md`). New "Validation rules" section in the API contract; the new-password minimum is 6 today (the seed script wants 8): see Open decisions #4.
 * 2026-11-12: T21b is done. `openapi.json` at the repository root is generated by `pnpm swagger:export` in preview mode (no database needed) and checked with `pnpm swagger:check`; it equals the running server's `/api-json`. The response class for a created organization's admin is `OrganizationCreatedAdminDto` (it shared a name with the request class, so Swagger had merged the two schemas). `.env` is loaded as the first import of `main.ts`; with the import last, `EMAIL_ENABLED` in `.env` was read after the module list was built, so the queues did not load.
+* 2026-11-12: Open decision #4 closed by the owner: the new-password minimum stays 6 (the seed script's 8 is only its own rule); a maximum of 72 is added because bcrypt ignores everything beyond 72 bytes (the owner's idea of a maximum of 10 was declined: short maximums push users to weaker passwords). Login keeps no maximum. A letter and a number stay required.
 
 ## Open decisions
 
