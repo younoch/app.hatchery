@@ -12,18 +12,10 @@ import { TankRepository } from '@/common/repositories/tank.repository';
 import { ReadingItemDto } from './dto/reading-item.dto';
 import { SyncReadingsDto } from './dto/sync-readings.dto';
 import type { SyncReadingsResponseDto } from './dto/sync-readings-response.dto';
+import { READING_LIMITS, RECORDED_AT_FLOOR } from './reading.constants';
 
-const RECORDED_AT_FLOOR = new Date('2020-01-01T00:00:00.000Z');
 const RECORDED_AT_FORMAT =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
-
-// Impossible-value guards, not ideal ranges (progress.md → Readings sync).
-const LIMITS = {
-  ph: { min: 0, max: 14 },
-  temperatureC: { min: 0, max: 60 },
-  salinityPpt: { min: 0, max: 100 },
-  oxygenMgL: { min: 0, max: 30 },
-} as const;
 
 interface ValidItem {
   index: number;
@@ -131,8 +123,8 @@ export class ReadingService {
     );
     const failed = new Set(errors.map((error) => error.field));
 
-    for (const [field, { min, max }] of Object.entries(LIMITS)) {
-      const value = dto[field as keyof typeof LIMITS];
+    for (const [field, { min, max }] of Object.entries(READING_LIMITS)) {
+      const value = dto[field as keyof typeof READING_LIMITS];
       if (!failed.has(field) && (value < min || value > max)) {
         errors.push({
           field,

@@ -14,38 +14,48 @@ import {
   IsUsername,
   toLowerTrimmed,
 } from '@/common/decorators/is-username.decorator';
+import {
+  EMAIL_SCHEMA,
+  PASSWORD_SCHEMA,
+  USERNAME_SCHEMA,
+} from '@/common/swagger/constraints';
+import {
+  NAME_MAX,
+  ORGANIZATION_NAME_MAX,
+  PASSWORD_MIN,
+} from '@/common/validation/limits';
 
 export class OrganizationAdminDto {
-  @ApiProperty({ example: 'cox-admin' })
+  @ApiProperty({ example: 'cox-admin', ...USERNAME_SCHEMA })
   @IsUsername()
   username: string;
 
-  @ApiProperty({ example: 'admin@hatchery.example' })
+  @ApiProperty({ example: 'admin@hatchery.example', ...EMAIL_SCHEMA })
   @Transform(toLowerTrimmed)
   @IsEmail()
   email: string;
 
-  @ApiPropertyOptional({ example: 'Rahim Uddin' })
+  @ApiPropertyOptional({ example: 'Rahim Uddin', maxLength: NAME_MAX })
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(NAME_MAX)
   name?: string;
 
-  @ApiProperty({ example: 'temp1234' })
+  @ApiProperty({ example: 'temp1234', ...PASSWORD_SCHEMA })
   @IsString()
-  @MinLength(6)
+  @MinLength(PASSWORD_MIN)
   @IsCustomStrongPassword()
   temporaryPassword: string;
 }
 
 export class CreateOrganizationDto {
-  @ApiProperty({ example: 'Cox Hatchery' })
+  @ApiProperty({ example: 'Cox Hatchery', maxLength: ORGANIZATION_NAME_MAX })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
   @IsString()
   @IsNotEmpty()
-  @MaxLength(100)
+  @MaxLength(ORGANIZATION_NAME_MAX)
   name: string;
 
   @ApiProperty({ type: OrganizationAdminDto })

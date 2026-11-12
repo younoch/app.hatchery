@@ -1,6 +1,7 @@
 import { applyDecorators } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import { Matches } from 'class-validator';
+import { USERNAME_REGEX } from '@/common/validation/limits';
 
 export const toLowerTrimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
@@ -8,6 +9,6 @@ export const toLowerTrimmed = ({ value }: { value: unknown }) =>
 export function IsUsername() {
   return applyDecorators(
     Transform(toLowerTrimmed),
-    Matches(/^[a-z0-9._-]{3,30}$/, { message: 'Invalid username' }),
+    Matches(USERNAME_REGEX, { message: 'Invalid username' }),
   );
 }

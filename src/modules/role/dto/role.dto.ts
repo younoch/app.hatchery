@@ -10,27 +10,36 @@ import {
   ORG_PERMISSIONS,
   OrgPermission,
 } from '@/common/permissions/permission.constants';
+import { ROLE_NAME_MIN } from '@/common/validation/limits';
 
 export class CreateRoleDto {
-  @ApiProperty({ example: 'editor' })
+  @ApiProperty({ example: 'editor', minLength: ROLE_NAME_MIN })
   @IsString()
-  @MinLength(2)
+  @MinLength(ROLE_NAME_MIN)
   name: string;
 
-  @ApiProperty({ example: ORG_PERMISSIONS.slice(0, 2) })
+  @ApiProperty({
+    example: ORG_PERMISSIONS.slice(0, 2),
+    enum: ORG_PERMISSIONS,
+    isArray: true,
+  })
   @IsArray()
   @IsIn(ORG_PERMISSIONS, { each: true })
   permissions: OrgPermission[];
 }
 
 export class UpdateRoleDto {
-  @ApiPropertyOptional({ example: 'editor' })
+  @ApiPropertyOptional({ example: 'editor', minLength: ROLE_NAME_MIN })
   @IsOptional()
   @IsString()
-  @MinLength(2)
+  @MinLength(ROLE_NAME_MIN)
   name?: string;
 
-  @ApiPropertyOptional({ example: ORG_PERMISSIONS.slice(0, 2) })
+  @ApiPropertyOptional({
+    example: ORG_PERMISSIONS.slice(0, 2),
+    enum: ORG_PERMISSIONS,
+    isArray: true,
+  })
   @IsOptional()
   @IsArray()
   @IsIn(ORG_PERMISSIONS, { each: true })

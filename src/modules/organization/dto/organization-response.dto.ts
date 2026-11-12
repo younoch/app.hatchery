@@ -8,7 +8,7 @@ export class OrganizationListItemDto {
   name: string;
 }
 
-export class OrganizationAdminDto {
+export class OrganizationCreatedAdminDto {
   @ApiProperty()
   id: string;
 
@@ -29,6 +29,6 @@ export class OrganizationCreatedDto {
   @ApiProperty()
   name: string;
 
-  @ApiProperty({ type: () => OrganizationAdminDto })
-  admin: OrganizationAdminDto;
+  @ApiProperty({ type: () => OrganizationCreatedAdminDto })
+  admin: OrganizationCreatedAdminDto;
 }

@@ -1,15 +1,17 @@
 import { IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsCustomStrongPassword } from '@/common/decorators/is-strong-password.decorator';
+import { PASSWORD_SCHEMA } from '@/common/swagger/constraints';
+import { PASSWORD_MIN } from '@/common/validation/limits';
 
 export class ResetPasswordDto {
   @ApiProperty({ example: 'reset-token-from-email' })
   @IsString()
   token: string;
 
-  @ApiProperty({ example: 'newPassword456' })
+  @ApiProperty({ example: 'newPassword456', ...PASSWORD_SCHEMA })
   @IsString()
-  @MinLength(6)
+  @MinLength(PASSWORD_MIN)
   @IsCustomStrongPassword()
   newPassword: string;
 }

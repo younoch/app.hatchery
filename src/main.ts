@@ -1,4 +1,5 @@
 import 'tsconfig-paths/register';
+import './config/load-env';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
@@ -7,10 +8,9 @@ import { ValidationPipe } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { setupSwagger } from './swagger';
 import cookieParser from 'cookie-parser';
 import { validationExceptionFactory } from './common/errors/validation-exception.factory';
-import './config/load-env';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -44,34 +44,7 @@ async function bootstrap() {
 
   // ✅ Swagger AFTER everything is configured (off in production by default)
   if (configService.get<boolean>('swaggerEnabled')) {
-    const config = new DocumentBuilder()
-      .setTitle('NestJS Backend API')
-      .setDescription('Reusable NestJS backend boilerplate API')
-      .setVersion('1.0')
-      .addBearerAuth(
-        {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-          in: 'header',
-          name: 'Authorization',
-        },
-        'access-token', // 👈 important
-      )
-      .addCookieAuth(
-        'refresh_token',
-        { type: 'apiKey', in: 'cookie' },
-        'refresh-cookie',
-      )
-      .setExternalDoc('OpenAPI JSON', '/api-json')
-      .build();
-
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api', app, document, {
-      swaggerOptions: {
-        persistAuthorization: true,
-      },
-    });
+    setupSwagger(app);
   }
 
   app.useLogger(app.get(Logger));
