@@ -1,4 +1,5 @@
 import {
+  PASSWORD_MAX,
   PASSWORD_MIN,
   PASSWORD_REGEX,
   USERNAME_MAX,
@@ -15,6 +16,7 @@ export const USERNAME_SCHEMA = {
 
 export const PASSWORD_SCHEMA = {
   minLength: PASSWORD_MIN,
+  maxLength: PASSWORD_MAX,
   pattern: PASSWORD_REGEX.source,
   description: 'At least one letter and one number',
 } as const;

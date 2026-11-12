@@ -5582,6 +5582,7 @@
             "type": "string",
             "example": "newPassword456",
             "minLength": 6,
+            "maxLength": 72,
             "pattern": "^(?=.*[A-Za-z])(?=.*\\d).+$",
             "description": "At least one letter and one number"
           }
@@ -5618,6 +5619,7 @@
             "type": "string",
             "example": "newPassword456",
             "minLength": 6,
+            "maxLength": 72,
             "pattern": "^(?=.*[A-Za-z])(?=.*\\d).+$",
             "description": "At least one letter and one number"
           }
@@ -5819,6 +5821,7 @@
             "type": "string",
             "example": "temp1234",
             "minLength": 6,
+            "maxLength": 72,
             "pattern": "^(?=.*[A-Za-z])(?=.*\\d).+$",
             "description": "At least one letter and one number"
           },
@@ -5859,6 +5862,7 @@
             "type": "string",
             "example": "temp5678",
             "minLength": 6,
+            "maxLength": 72,
             "pattern": "^(?=.*[A-Za-z])(?=.*\\d).+$",
             "description": "At least one letter and one number"
           }
@@ -6024,6 +6028,7 @@
             "type": "string",
             "example": "temp1234",
             "minLength": 6,
+            "maxLength": 72,
             "pattern": "^(?=.*[A-Za-z])(?=.*\\d).+$",
             "description": "At least one letter and one number"
           }

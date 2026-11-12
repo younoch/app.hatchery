@@ -7,6 +7,8 @@ export const USERNAME_REGEX = new RegExp(
 // New passwords (temporary and changed). Login has its own, lower minimum so
 // older accounts can still sign in if PASSWORD_MIN is raised.
 export const PASSWORD_MIN = 6;
+// bcrypt ignores everything past 72 bytes, so a longer limit would be a lie.
+export const PASSWORD_MAX = 72;
 export const LOGIN_PASSWORD_MIN = 6;
 export const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).+$/;
 
