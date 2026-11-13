@@ -4,7 +4,7 @@
 
 Implemented (T2–T18): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging, Swagger response schemas. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): `GET /readings` for the user's own readings (T23), `GET /sync/state` change markers (T24), the deployment guide (T20b), nightly backups (T20c).
+Not implemented (marked **planned** below): `GET /sync/state` change markers (T24), the deployment guide (T20b), nightly backups (T20c).
 
 Known bugs today:
 
@@ -45,7 +45,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T21a | Per-endpoint error declarations (F→B-29 items 1 and 4): `@ApiErrors(...codes)` on every endpoint lists only the response-level codes it can return (the status comes from `RESPONSE_ERROR_STATUS` in `error-codes.ts`; the schema narrows `statusCode` and `code` per status); `ErrorCode` and `FieldErrorCode` are named enum schemas; `Retry-After` declared on every 429; the refresh cookie (name, path) on the auth endpoints; `x-works-while-must-change-password` on the endpoints that work while the password is temporary | done | T18, T19 |
 | T21b | Request limits and nullability (F→B-29 items 2 and 3): limits live in shared constants used by both the validators and `@ApiProperty` (`recordedAt` date-time, uuid formats, the measurement limits, `maxItems` 100, `maxLength` 200, name and password lengths), `nullable` and `required` checked on every response DTO; the Swagger setup moves to `src/swagger.ts`; `pnpm swagger:export` writes the committed `openapi.json` without a database (Swagger is off in production) and `pnpm swagger:check` fails when it is stale | done | T21a |
 | T22 | Password maximum (Open decision #4): new passwords are 6 to 72 characters, with a letter and a number as before; `PASSWORD_MAX` in `limits.ts`, enforced inside `IsCustomStrongPassword()` and declared as `maxLength` in the schema; login keeps no maximum | done | T21b |
-| T23 | `GET /readings` (F→B-28): the caller's own readings, newest first, cursor pagination, optional `tankId`, `from`, `to`; one new index on `Reading`; response DTO, errors and `openapi.json` as usual | not started | T15, T21b |
+| T23 | `GET /readings` (F→B-28): the caller's own readings, newest first, cursor pagination, optional `tankId`, `from`, `to`; one new index on `Reading`; response DTO, errors and `openapi.json` as usual | done | T15, T21b |
 | T24 | `GET /sync/state` (F→B-31): one change marker per resource (`organization`, `tanks`, `organizationRoles`) kept in a new `SyncMarker` table and bumped in the same transaction as every write, deletes included; response DTO, errors and `openapi.json` as usual | not started | T21b |
 ## API contract
 
@@ -74,7 +74,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; ordered by name; not paginated). Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | implemented (T14) |
 | `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name, organizationId? }` (`organizationId` is required for the super admin); `{ name?, isActive? }` (at least one) | the tank, same shape as a list item | implemented (T14). `name` is trimmed, 1–50 characters, unique within the organization ignoring case: a duplicate is 409 `tank_name_taken`. `PATCH` with no field: 400 `bad_request`. An inactive tank can still be renamed. A tank of another organization: 404 `tank_not_found` |
 | `POST /readings/sync` | `reading:create` | see below | see below | implemented (T15) |
-| `GET /readings` | any organization member | `tankId?`, `from?`, `to?`, `limit?`, `cursor?` | `{ items, nextCursor }` | planned (T23); see Own readings below |
+| `GET /readings` | any organization member | `tankId?`, `from?`, `to?`, `limit?`, `cursor?` | `{ items, nextCursor }` | implemented (T23); see Own readings below |
 | `GET /sync/state` | any organization member | none | `{ organization, tanks, organizationRoles }` (opaque timestamps) | planned (T24); see Change markers below |
 | `GET /health` | none | — | `{ status, info, error, details }` | implemented |
 
@@ -103,6 +103,8 @@ The same numbers are declared in `/api-json` and `openapi.json`. The frontend do
 Query: `tankId` (uuid, optional); `from` and `to` (ISO 8601 with a time zone, optional; `from` is inclusive, `to` is exclusive, and `from` must be before `to`, otherwise 400 `validation_failed` with field `to`, code `out_of_range`); `limit` (1–100, default 50); `cursor` (opaque, taken from the previous answer).
 
 Response `data`: `{ items: [{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxygenMgL, note, syncedAt }], nextCursor }`. Newest first by `recordedAt`, ties by `id`. `note` is `null` when there is none. `recordedAt` and `syncedAt` are UTC (`...Z`): the time-zone offset a client sent is not kept. `nextCursor` is `null` on the last page; send it back unchanged as `cursor`, with the same filters. A `cursor` that did not come from this endpoint: 400 `validation_failed`, field `cursor`, code `invalid_format`. There is no `total`: the list only grows while the user works, so a count would be stale and costs a scan; stop when `nextCursor` is `null`. A cursor is used instead of `page` because new readings sync while the client pages, and page numbers would repeat or skip items.
+
+A `limit` above 100 or below 1 answers 400 `validation_failed` with field `limit`, code `out_of_range` and `params: { max: 100 }`; `from` or `to` without a time zone (a bare date) answers `invalid_datetime`.
 
 "Last value" prefill for a tank: `GET /readings?tankId=...&limit=1`.
 
