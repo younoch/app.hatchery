@@ -9,3 +9,9 @@ export const READING_LIMITS = {
   salinityPpt: { min: 0, max: 100 },
   oxygenMgL: { min: 0, max: 30 },
 } as const;
+
+export const READINGS_PAGE_DEFAULT = 50;
+export const READINGS_PAGE_MAX = 100;
+
+export const RECORDED_AT_FORMAT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;

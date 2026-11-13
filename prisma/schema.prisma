@@ -122,6 +122,7 @@ model Reading {
   syncedAt     DateTime @default(now())
 
   @@index([createdById, tankId, recordedAt])
+  @@index([createdById, recordedAt, id])
 }
 
 enum VerificationStatus {

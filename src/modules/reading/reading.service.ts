@@ -12,10 +12,14 @@ import { TankRepository } from '@/common/repositories/tank.repository';
 import { ReadingItemDto } from './dto/reading-item.dto';
 import { SyncReadingsDto } from './dto/sync-readings.dto';
 import type { SyncReadingsResponseDto } from './dto/sync-readings-response.dto';
-import { READING_LIMITS, RECORDED_AT_FLOOR } from './reading.constants';
-
-const RECORDED_AT_FORMAT =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+import {
+  READING_LIMITS,
+  RECORDED_AT_FLOOR,
+  RECORDED_AT_FORMAT,
+} from './reading.constants';
+import type { ListReadingsQueryDto } from './dto/list-readings-query.dto';
+import type { ReadingListResponseDto } from './dto/reading-response.dto';
+import { toReadingResponse } from './reading.mapper';
 
 interface ValidItem {
   index: number;
@@ -50,6 +54,98 @@ export class ReadingService {
     this.futureToleranceMs = configService.getOrThrow<number>(
       'READING_FUTURE_TOLERANCE_MS',
     );
+  }
+
+    async list(
+    query: ListReadingsQueryDto,
+    caller: JwtUser,
+  ): Promise<ReadingListResponseDto> {
+    if (!caller.organizationId) {
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        ErrorCode.NO_ORGANIZATION,
+        'User has no organization',
+      );
+    }
+
+    const errors: FieldError[] = [];
+    const from = this.parseBound('from', query.from, errors);
+    const to = this.parseBound('to', query.to, errors);
+    const after = this.decodeCursor(query.cursor, errors);
+    if (from && to && from >= to) {
+      errors.push({ field: 'to', code: ErrorCode.OUT_OF_RANGE });
+    }
+    if (errors.length > 0) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.VALIDATION_FAILED,
+        'Validation failed',
+        errors,
+      );
+    }
+
+    const rows = await this.readingRepository.findPageForUser({
+      userId: caller.userId,
+      tankId: query.tankId,
+      from,
+      to,
+      after,
+      take: query.limit + 1,
+    });
+    const items = rows.slice(0, query.limit);
+    const last = items[items.length - 1];
+    return {
+      items: items.map(toReadingResponse),
+      nextCursor:
+        rows.length > query.limit && last ? this.encodeCursor(last) : null,
+    };
+  }
+
+  private parseBound(
+    field: string,
+    value: string | undefined,
+    errors: FieldError[],
+  ): Date | undefined {
+    if (value === undefined) return undefined;
+    const date = new Date(value);
+    if (!RECORDED_AT_FORMAT.test(value) || Number.isNaN(date.getTime())) {
+      errors.push({ field, code: ErrorCode.INVALID_DATETIME });
+      return undefined;
+    }
+    return date;
+  }
+
+  private encodeCursor(reading: Reading): string {
+    return Buffer.from(
+      JSON.stringify([reading.recordedAt.toISOString(), reading.id]),
+    ).toString('base64url');
+  }
+
+  private decodeCursor(
+    cursor: string | undefined,
+    errors: FieldError[],
+  ): { recordedAt: Date; id: string } | undefined {
+    if (cursor === undefined) return undefined;
+    try {
+      const parsed: unknown = JSON.parse(
+        Buffer.from(cursor, 'base64url').toString('utf8'),
+      );
+      if (
+        Array.isArray(parsed) &&
+        parsed.length === 2 &&
+        typeof parsed[0] === 'string' &&
+        typeof parsed[1] === 'string'
+      ) {
+        const recordedAt = new Date(parsed[0]);
+        if (!Number.isNaN(recordedAt.getTime())) {
+          return { recordedAt, id: parsed[1] };
+        }
+      }
+    } catch {
+      // falls through to the error below
+    }
+    errors.push({ field: 'cursor', code: ErrorCode.INVALID_FORMAT });
+    return undefined;
   }
 
   async sync(

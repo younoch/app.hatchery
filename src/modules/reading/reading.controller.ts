@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -16,7 +18,9 @@ import { ReadingService } from './reading.service';
 import { SyncReadingsDto } from './dto/sync-readings.dto';
 import { ApiEnvelope, ApiErrors } from '@/common/swagger/api-envelope';
 import { SyncReadingsResponseDto } from './dto/sync-readings-response.dto';
-import { ERRORS_PERMISSION } from '@/common/swagger/error-sets';
+import { ERRORS_PERMISSION, ERRORS_SESSION } from '@/common/swagger/error-sets';
+import { ListReadingsQueryDto } from './dto/list-readings-query.dto';
+import { ReadingListResponseDto } from './dto/reading-response.dto';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
@@ -38,5 +42,15 @@ export class ReadingController {
   @Post('sync')
   sync(@Body() dto: SyncReadingsDto, @CurrentUser() currentUser: JwtUser) {
     return this.readingService.sync(dto, currentUser);
+  }
+
+  @ApiEnvelope(ReadingListResponseDto)
+  @ApiErrors(...ERRORS_SESSION, 'no_organization', 'validation_failed')
+  @Get()
+  list(
+    @Query() query: ListReadingsQueryDto,
+    @CurrentUser() currentUser: JwtUser,
+  ) {
+    return this.readingService.list(query, currentUser);
   }
 }
