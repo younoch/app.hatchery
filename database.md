@@ -83,7 +83,7 @@ Immutable in the pilot.
 | recordedAt | DateTime | yes | - | From the client (ISO 8601 with a time zone). Not before 2020-01-01; more than 10 minutes in the future is rejected |
 | syncedAt | DateTime | yes | now() | Set by the server only |
 
-Index: `[createdById, tankId, recordedAt]` (matches the frontend's local index). Add `[tankId, recordedAt]` when the dashboard needs per-tank charts.
+Indexes: `[createdById, tankId, recordedAt]` (matches the frontend's local index; serves `GET /readings` with a tank filter) and `[createdById, recordedAt, id]` (serves `GET /readings` without one; read backwards for newest first). Add `[tankId, recordedAt]` when the dashboard needs per-tank charts.
 Value limits (impossible values only) and the future-time limit are validated in the service; see `progress.md` → Readings sync.
 Deliberately absent in the pilot: `isLate`, `needsReview` (derive `isLate` from `syncedAt - recordedAt` later), `ReadingAudit`, any edit path.
 

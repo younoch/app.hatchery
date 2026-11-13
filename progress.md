@@ -4,7 +4,7 @@
 
 Implemented (T2–T18): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging, Swagger response schemas. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): the deployment guide (T20b), nightly backups (T20c).
+Not implemented (marked **planned** below): `GET /readings` for the user's own readings (T23), the deployment guide (T20b), nightly backups (T20c).
 
 Known bugs today:
 
@@ -45,7 +45,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T21a | Per-endpoint error declarations (F→B-29 items 1 and 4): `@ApiErrors(...codes)` on every endpoint lists only the response-level codes it can return (the status comes from `RESPONSE_ERROR_STATUS` in `error-codes.ts`; the schema narrows `statusCode` and `code` per status); `ErrorCode` and `FieldErrorCode` are named enum schemas; `Retry-After` declared on every 429; the refresh cookie (name, path) on the auth endpoints; `x-works-while-must-change-password` on the endpoints that work while the password is temporary | done | T18, T19 |
 | T21b | Request limits and nullability (F→B-29 items 2 and 3): limits live in shared constants used by both the validators and `@ApiProperty` (`recordedAt` date-time, uuid formats, the measurement limits, `maxItems` 100, `maxLength` 200, name and password lengths), `nullable` and `required` checked on every response DTO; the Swagger setup moves to `src/swagger.ts`; `pnpm swagger:export` writes the committed `openapi.json` without a database (Swagger is off in production) and `pnpm swagger:check` fails when it is stale | done | T21a |
 | T22 | Password maximum (Open decision #4): new passwords are 6 to 72 characters, with a letter and a number as before; `PASSWORD_MAX` in `limits.ts`, enforced inside `IsCustomStrongPassword()` and declared as `maxLength` in the schema; login keeps no maximum | done | T21b |
-
+| T23 | `GET /readings` (F→B-28): the caller's own readings, newest first, cursor pagination, optional `tankId`, `from`, `to`; one new index on `Reading`; response DTO, errors and `openapi.json` as usual | not started | T15, T21b |
 ## API contract
 
 Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status": **implemented** = exists today; **planned** = decided, task in brackets. Organization-scoped endpoints take `organizationId` (query for GET, body for POST) from the **super admin only** (required); everyone else uses their own organization.
@@ -73,6 +73,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `GET /tanks` | any organization member | `organizationId` (super admin) | `[{ id, name, isActive }]` (inactive tanks included; ordered by name; not paginated). Super admin without `organizationId` → 400 `organization_required`; user without an organization → 403 `no_organization` | implemented (T14) |
 | `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name, organizationId? }` (`organizationId` is required for the super admin); `{ name?, isActive? }` (at least one) | the tank, same shape as a list item | implemented (T14). `name` is trimmed, 1–50 characters, unique within the organization ignoring case: a duplicate is 409 `tank_name_taken`. `PATCH` with no field: 400 `bad_request`. An inactive tank can still be renamed. A tank of another organization: 404 `tank_not_found` |
 | `POST /readings/sync` | `reading:create` | see below | see below | implemented (T15) |
+| `GET /readings` | any organization member | `tankId?`, `from?`, `to?`, `limit?`, `cursor?` | `{ items, nextCursor }` | planned (T23); see Own readings below |
 | `GET /health` | none | — | `{ status, info, error, details }` | implemented |
 
 **User shape** (T11a): `{ id, username, email, name, isActive, mustChangePassword, organizationId, role: { id, name } | null, createdAt }`. The role carries no permissions: the global role's list is only a template, the real permissions are per organization.
@@ -92,6 +93,18 @@ The same numbers are declared in `/api-json` and `openapi.json`. The frontend do
 * Role and organization-role `permissions`: only organization-level keys (`not_allowed`).
 * Lists: `page` 1 or more (default 1), `pageSize` 1–100 (default 10).
 * Readings sync: 1–100 items per call; the item rules are in the next section.
+
+### Own readings (T23)
+
+`GET /readings` returns the signed-in user's own readings (`createdById` is the caller), never anyone else's; organization-wide viewing stays later behind `reading:read-all`. It needs a user with an organization (`no_organization` otherwise) and no permission key.
+
+Query: `tankId` (uuid, optional); `from` and `to` (ISO 8601 with a time zone, optional; `from` is inclusive, `to` is exclusive, and `from` must be before `to`, otherwise 400 `validation_failed` with field `to`, code `out_of_range`); `limit` (1–100, default 50); `cursor` (opaque, taken from the previous answer).
+
+Response `data`: `{ items: [{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxygenMgL, note, syncedAt }], nextCursor }`. Newest first by `recordedAt`, ties by `id`. `note` is `null` when there is none. `recordedAt` and `syncedAt` are UTC (`...Z`): the time-zone offset a client sent is not kept. `nextCursor` is `null` on the last page; send it back unchanged as `cursor`, with the same filters. A `cursor` that did not come from this endpoint: 400 `validation_failed`, field `cursor`, code `invalid_format`. There is no `total`: the list only grows while the user works, so a count would be stale and costs a scan; stop when `nextCursor` is `null`. A cursor is used instead of `page` because new readings sync while the client pages, and page numbers would repeat or skip items.
+
+"Last value" prefill for a tank: `GET /readings?tankId=...&limit=1`.
+
+Errors: 400 `validation_failed`, 401, 403 `must_change_password` or `no_organization`, 429.
 
 ### Readings sync (T15)
 
@@ -208,6 +221,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-12: T21b is done. `openapi.json` at the repository root is generated by `pnpm swagger:export` in preview mode (no database needed) and checked with `pnpm swagger:check`; it equals the running server's `/api-json`. The response class for a created organization's admin is `OrganizationCreatedAdminDto` (it shared a name with the request class, so Swagger had merged the two schemas). `.env` is loaded as the first import of `main.ts`; with the import last, `EMAIL_ENABLED` in `.env` was read after the module list was built, so the queues did not load.
 * 2026-11-12: Open decision #4 closed by the owner: the new-password minimum stays 6 (the seed script's 8 is only its own rule); a maximum of 72 is added because bcrypt ignores everything beyond 72 bytes (the owner's idea of a maximum of 10 was declined: short maximums push users to weaker passwords). Login keeps no maximum. A letter and a number stay required.
 * 2026-11-12: T20 design. Render and Neon both in Singapore (closest to Bangladesh). The app and the migrations use Neon's direct (not pooled) connection string with `sslmode=require`, `connect_timeout=15` and `connection_limit=5`; pooling waits until the traffic needs it. Render build: `corepack enable && corepack prepare pnpm@12.3.4 --activate && pnpm install --frozen-lockfile --prod=false && pnpm prisma generate && pnpm build && pnpm prisma migrate deploy && pnpm prisma db seed` (the seed is idempotent); start: `pnpm start:prod`; no health-check path, because `/health` queries the database and frequent calls would keep Neon's compute awake all month. `.node-version` and `engines.node` pin Node 24 (Render picks the version from `NODE_VERSION`, then `.node-version`, then `.nvmrc`, then `engines.node`), and `packageManager` pins pnpm, so `allowBuilds` in `pnpm-workspace.yaml` is understood and the lockfile's `packageManagerDependencies` section is readable. Production environment: `NODE_ENV=production`, `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=lax`, `REFRESH_COOKIE_PATH=/api/auth/refresh`, `EMAIL_ENABLED=false`, a fresh random `JWT_SECRET`, a strong seed password kept in a password manager (it cannot be recovered from the app); secrets live only in the Render dashboard. `TRUST_PROXY` is measured, not guessed: the request log carries `ip` and `forwardedFor`, and the value is the one where the logged `ip` equals the caller's real public IP. Backups: a nightly `pg_dump` in GitHub Actions, encrypted with a passphrase secret before upload (artifacts are downloadable and the data is real), and a restore drill before real data arrives.
+* 2026-11-13: `GET /readings` (F→B-28). The caller's own readings only; any organization member, no new permission key. Cursor pagination (`limit` 1–100, default 50, opaque `cursor`, `nextCursor` null on the last page) and not `page`/`pageSize`, because readings keep arriving while the client pages; no `total`. Newest first by `recordedAt`, ties by `id`; `from` inclusive, `to` exclusive. A new index `[createdById, recordedAt, id]` serves it (the existing `[createdById, tankId, recordedAt]` stays for the tank filter). Organization-wide listing stays parked behind `reading:read-all`.
 
 ## Open decisions
 
