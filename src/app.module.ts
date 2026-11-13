@@ -72,6 +72,10 @@ import { HealthModule } from '@/modules/health/health.module';
               };
             },
           },
+          customProps: (req: IncomingMessage) => ({
+            ip: (req as IncomingMessage & { ip?: string }).ip,
+            forwardedFor: req.headers['x-forwarded-for'],
+          }),
           customSuccessMessage: (req, res) => {
             return `${req.method} ${req.url} ${res.statusCode}`;
           },
