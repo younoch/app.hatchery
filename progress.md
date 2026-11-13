@@ -4,7 +4,7 @@
 
 Implemented (T2–T18): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging, Swagger response schemas. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): `GET /readings` for the user's own readings (T23), the deployment guide (T20b), nightly backups (T20c).
+Not implemented (marked **planned** below): `GET /readings` for the user's own readings (T23), `GET /sync/state` change markers (T24), the deployment guide (T20b), nightly backups (T20c).
 
 Known bugs today:
 
@@ -46,6 +46,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T21b | Request limits and nullability (F→B-29 items 2 and 3): limits live in shared constants used by both the validators and `@ApiProperty` (`recordedAt` date-time, uuid formats, the measurement limits, `maxItems` 100, `maxLength` 200, name and password lengths), `nullable` and `required` checked on every response DTO; the Swagger setup moves to `src/swagger.ts`; `pnpm swagger:export` writes the committed `openapi.json` without a database (Swagger is off in production) and `pnpm swagger:check` fails when it is stale | done | T21a |
 | T22 | Password maximum (Open decision #4): new passwords are 6 to 72 characters, with a letter and a number as before; `PASSWORD_MAX` in `limits.ts`, enforced inside `IsCustomStrongPassword()` and declared as `maxLength` in the schema; login keeps no maximum | done | T21b |
 | T23 | `GET /readings` (F→B-28): the caller's own readings, newest first, cursor pagination, optional `tankId`, `from`, `to`; one new index on `Reading`; response DTO, errors and `openapi.json` as usual | not started | T15, T21b |
+| T24 | `GET /sync/state` (F→B-31): one change marker per resource (`organization`, `tanks`, `organizationRoles`) kept in a new `SyncMarker` table and bumped in the same transaction as every write, deletes included; response DTO, errors and `openapi.json` as usual | not started | T21b |
 ## API contract
 
 Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status": **implemented** = exists today; **planned** = decided, task in brackets. Organization-scoped endpoints take `organizationId` (query for GET, body for POST) from the **super admin only** (required); everyone else uses their own organization.
@@ -74,6 +75,7 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name, organizationId? }` (`organizationId` is required for the super admin); `{ name?, isActive? }` (at least one) | the tank, same shape as a list item | implemented (T14). `name` is trimmed, 1–50 characters, unique within the organization ignoring case: a duplicate is 409 `tank_name_taken`. `PATCH` with no field: 400 `bad_request`. An inactive tank can still be renamed. A tank of another organization: 404 `tank_not_found` |
 | `POST /readings/sync` | `reading:create` | see below | see below | implemented (T15) |
 | `GET /readings` | any organization member | `tankId?`, `from?`, `to?`, `limit?`, `cursor?` | `{ items, nextCursor }` | planned (T23); see Own readings below |
+| `GET /sync/state` | any organization member | none | `{ organization, tanks, organizationRoles }` (opaque timestamps) | planned (T24); see Change markers below |
 | `GET /health` | none | — | `{ status, info, error, details }` | implemented |
 
 **User shape** (T11a): `{ id, username, email, name, isActive, mustChangePassword, organizationId, role: { id, name } | null, createdAt }`. The role carries no permissions: the global role's list is only a template, the real permissions are per organization.
@@ -105,6 +107,18 @@ Response `data`: `{ items: [{ id, tankId, recordedAt, ph, temperatureC, salinity
 "Last value" prefill for a tank: `GET /readings?tankId=...&limit=1`.
 
 Errors: 400 `validation_failed`, 401, 403 `must_change_password` or `no_organization`, 429.
+
+### Change markers (T24)
+
+`GET /sync/state` tells the client which resources of its organization changed, so it refetches only those. Any organization member, no permission key; `no_organization` for a user without an organization.
+
+Response `data`: `{ organization, tanks, organizationRoles }`. Each value is an ISO 8601 UTC string, or `null` when the resource was never written. The value is opaque: the client stores the last seen value per resource and refetches that resource when the new value is different (a difference, not "newer"); it never compares it with the phone clock. The client should read the marker first and then fetch the list, and store the marker it read before the fetch (a write in between then causes one extra refetch, never a missed change).
+
+The marker lives in the `SyncMarker` table (`organizationId`, `resource`, `changedAt`, one row per organization and resource). Every write to a tank, an organization role or the organization sets `changedAt` to the database clock in the same transaction as the write, deletes included, so a failed write never moves a marker.
+
+Not included: readings (they need `updatedAfter` and soft deletes, designed together with `GET /readings`) and users (added the same way when the frontend caches them).
+
+Errors: 401, 403 `must_change_password` or `no_organization`, 429.
 
 ### Readings sync (T15)
 
@@ -222,6 +236,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-12: Open decision #4 closed by the owner: the new-password minimum stays 6 (the seed script's 8 is only its own rule); a maximum of 72 is added because bcrypt ignores everything beyond 72 bytes (the owner's idea of a maximum of 10 was declined: short maximums push users to weaker passwords). Login keeps no maximum. A letter and a number stay required.
 * 2026-11-12: T20 design. Render and Neon both in Singapore (closest to Bangladesh). The app and the migrations use Neon's direct (not pooled) connection string with `sslmode=require`, `connect_timeout=15` and `connection_limit=5`; pooling waits until the traffic needs it. Render build: `corepack enable && corepack prepare pnpm@12.3.4 --activate && pnpm install --frozen-lockfile --prod=false && pnpm prisma generate && pnpm build && pnpm prisma migrate deploy && pnpm prisma db seed` (the seed is idempotent); start: `pnpm start:prod`; no health-check path, because `/health` queries the database and frequent calls would keep Neon's compute awake all month. `.node-version` and `engines.node` pin Node 24 (Render picks the version from `NODE_VERSION`, then `.node-version`, then `.nvmrc`, then `engines.node`), and `packageManager` pins pnpm, so `allowBuilds` in `pnpm-workspace.yaml` is understood and the lockfile's `packageManagerDependencies` section is readable. Production environment: `NODE_ENV=production`, `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=lax`, `REFRESH_COOKIE_PATH=/api/auth/refresh`, `EMAIL_ENABLED=false`, a fresh random `JWT_SECRET`, a strong seed password kept in a password manager (it cannot be recovered from the app); secrets live only in the Render dashboard. `TRUST_PROXY` is measured, not guessed: the request log carries `ip` and `forwardedFor`, and the value is the one where the logged `ip` equals the caller's real public IP. Backups: a nightly `pg_dump` in GitHub Actions, encrypted with a passphrase secret before upload (artifacts are downloadable and the data is real), and a restore drill before real data arrives.
 * 2026-11-13: `GET /readings` (F→B-28). The caller's own readings only; any organization member, no new permission key. Cursor pagination (`limit` 1–100, default 50, opaque `cursor`, `nextCursor` null on the last page) and not `page`/`pageSize`, because readings keep arriving while the client pages; no `total`. Newest first by `recordedAt`, ties by `id`; `from` inclusive, `to` exclusive. A new index `[createdById, recordedAt, id]` serves it (the existing `[createdById, tankId, recordedAt]` stays for the tank filter). Organization-wide listing stays parked behind `reading:read-all`.
+* 2026-11-13: `GET /sync/state` (F→B-31). Change markers are rows of a new `SyncMarker` table, bumped with the database clock inside the transaction of every write (deletes included), not derived from `max(updatedAt)`, which cannot see a delete. Timestamp, not a counter (the owner's preference); the client compares by difference. Resources: `organization`, `tanks`, `organizationRoles`; readings and users are not part of it yet. `createdAt` and `updatedAt` on Tank, Organization and OrganizationRole are not needed for this and stay in the parking lot.
 
 ## Open decisions
 
@@ -267,3 +282,4 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * A liveness endpoint that does not touch the database (for a Render health check and an uptime pinger); until then neither is configured, so Neon's compute can sleep
 * `render.yaml` (Render Blueprint) to recreate the service from the repository; skipped for now because the free plan's Blueprint behaviour is unverified
 * Neon's pooled connection string (and `directUrl` for migrations) when the traffic grows
+* `createdAt` and `updatedAt` on Tank, Organization and OrganizationRole (audit and debugging; the change markers do not need them).
