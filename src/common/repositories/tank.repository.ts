@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { runInTransaction } from '@/common/prisma/run-in-transaction';
+import { SyncMarkerRepository } from './sync-marker.repository';
 
 @Injectable()
 export class TankRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly syncMarkers: SyncMarkerRepository,
+  ) {}
 
   findManyByOrganization(organizationId: string) {
     return this.prisma.tank.findMany({
@@ -37,8 +42,11 @@ export class TankRepository {
   }
 
   create(organizationId: string, name: string, tx?: Prisma.TransactionClient) {
-    const client = tx ?? this.prisma;
-    return client.tank.create({ data: { organizationId, name } });
+    return runInTransaction(this.prisma, tx, async (client) => {
+      const tank = await client.tank.create({ data: { organizationId, name } });
+      await this.syncMarkers.touch(organizationId, 'tanks', client);
+      return tank;
+    });
   }
 
   update(
@@ -46,7 +54,10 @@ export class TankRepository {
     data: { name?: string; isActive?: boolean },
     tx?: Prisma.TransactionClient,
   ) {
-    const client = tx ?? this.prisma;
-    return client.tank.update({ where: { id }, data });
+    return runInTransaction(this.prisma, tx, async (client) => {
+      const tank = await client.tank.update({ where: { id }, data });
+      await this.syncMarkers.touch(tank.organizationId, 'tanks', client);
+      return tank;
+    });
   }
 }

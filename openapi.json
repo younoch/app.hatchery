@@ -5593,6 +5593,158 @@
           "Readings"
         ]
       }
+    },
+    "/sync/state": {
+      "get": {
+        "operationId": "SyncController_state",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SyncStateResponseDto"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: unauthorized, user_inactive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseDto"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "enum": [
+                            401
+                          ]
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "unauthorized",
+                            "user_inactive"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: must_change_password, no_organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseDto"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "enum": [
+                            403
+                          ]
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "must_change_password",
+                            "no_organization"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited: rate_limited",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before the next request",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponseDto"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "enum": [
+                            429
+                          ]
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "rate_limited"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "Sync"
+        ]
+      }
     }
   },
   "info": {
@@ -6650,6 +6802,37 @@
         "required": [
           "items",
           "nextCursor"
+        ]
+      },
+      "SyncStateResponseDto": {
+        "type": "object",
+        "properties": {
+          "organization": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-11-13T10:00:00.000Z",
+            "description": "Change marker of the organization itself; null when never written. Opaque: refetch when it differs from the stored one"
+          },
+          "tanks": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-11-13T10:00:00.000Z",
+            "description": "Change marker of the tank list (create, rename, activate, deactivate); null when never written"
+          },
+          "organizationRoles": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-11-13T10:00:00.000Z",
+            "description": "Change marker of the organization role list (permissions); null when never written"
+          }
+        },
+        "required": [
+          "organization",
+          "tanks",
+          "organizationRoles"
         ]
       }
     }

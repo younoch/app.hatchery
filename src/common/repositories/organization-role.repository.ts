@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { runInTransaction } from '@/common/prisma/run-in-transaction';
+import { SyncMarkerRepository } from './sync-marker.repository';
 
 @Injectable()
 export class OrganizationRoleRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly syncMarkers: SyncMarkerRepository,
+  ) {}
 
   findByOrganizationAndRole(
     organizationId: string,
@@ -22,13 +27,16 @@ export class OrganizationRoleRepository {
     rows: { roleId: string; permissions: string[] }[],
     tx?: Prisma.TransactionClient,
   ) {
-    const client = tx ?? this.prisma;
-    return client.organizationRole.createMany({
-      data: rows.map((row) => ({
-        organizationId,
-        roleId: row.roleId,
-        permissions: row.permissions,
-      })),
+    return runInTransaction(this.prisma, tx, async (client) => {
+      const result = await client.organizationRole.createMany({
+        data: rows.map((row) => ({
+          organizationId,
+          roleId: row.roleId,
+          permissions: row.permissions,
+        })),
+      });
+      await this.syncMarkers.touch(organizationId, 'organizationRoles', client);
+      return result;
     });
   }
 
@@ -52,11 +60,14 @@ export class OrganizationRoleRepository {
     permissions: string[],
     tx?: Prisma.TransactionClient,
   ) {
-    const client = tx ?? this.prisma;
-    return client.organizationRole.update({
-      where: { id },
-      data: { permissions },
-      include: { role: { select: { id: true, name: true } } },
+    return runInTransaction(this.prisma, tx, async (client) => {
+      const row = await client.organizationRole.update({
+        where: { id },
+        data: { permissions },
+        include: { role: { select: { id: true, name: true } } },
+      });
+      await this.syncMarkers.touch(row.organizationId, 'organizationRoles', client);
+      return row;
     });
   }
 }

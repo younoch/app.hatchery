@@ -45,6 +45,7 @@ model Organization {
   users             User[]
   organizationRoles OrganizationRole[]
   tanks             Tank[]
+  syncMarkers       SyncMarker[]
 }
 
 model Tank {
@@ -130,4 +131,19 @@ enum VerificationStatus {
   SENT
   VERIFIED
   EXPIRED
+}
+
+enum SyncResource {
+  organization
+  tanks
+  organizationRoles
+}
+
+model SyncMarker {
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  resource       SyncResource
+  changedAt      DateTime
+
+  @@id([organizationId, resource])
 }

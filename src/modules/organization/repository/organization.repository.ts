@@ -1,14 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { runInTransaction } from '@/common/prisma/run-in-transaction';
+import { SyncMarkerRepository } from '@/common/repositories/sync-marker.repository';
 
 @Injectable()
 export class OrganizationRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly syncMarkers: SyncMarkerRepository,
+  ) {}
 
   create(name: string, tx?: Prisma.TransactionClient) {
-    const client = tx ?? this.prisma;
-    return client.organization.create({ data: { name } });
+    return runInTransaction(this.prisma, tx, async (client) => {
+      const organization = await client.organization.create({
+        data: { name },
+      });
+      await this.syncMarkers.touch(organization.id, 'organization', client);
+      return organization;
+    });
   }
 
   // Serializes concurrent admin transfers of one organization.

@@ -23,6 +23,7 @@ import { OrganizationModule } from '@/modules/organization/organization.module';
 import { OrganizationRoleModule } from '@/modules/organization-role/organization-role.module';
 import { TankModule } from '@/modules/tank/tank.module';
 import { ReadingModule } from '@/modules/reading/reading.module';
+import { SyncModule } from '@/modules/sync/sync.module';
 import { HealthModule } from '@/modules/health/health.module';
 
 @Module({
@@ -101,6 +102,7 @@ import { HealthModule } from '@/modules/health/health.module';
     OrganizationRoleModule,
     TankModule,
     ReadingModule,
+    SyncModule,
   ],
   providers: [
     {

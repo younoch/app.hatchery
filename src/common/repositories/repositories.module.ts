@@ -6,6 +6,7 @@ import { RefreshTokenRepository } from './refresh-token.repository';
 import { OrganizationRoleRepository } from './organization-role.repository';
 import { TankRepository } from './tank.repository';
 import { ReadingRepository } from './reading.repository';
+import { SyncMarkerRepository } from './sync-marker.repository';
 
 @Module({
   imports: [PrismaModule],
@@ -16,6 +17,7 @@ import { ReadingRepository } from './reading.repository';
     OrganizationRoleRepository,
     TankRepository,
     ReadingRepository,
+    SyncMarkerRepository,
   ],
   exports: [
     UserRepository,
@@ -24,6 +26,7 @@ import { ReadingRepository } from './reading.repository';
     OrganizationRoleRepository,
     TankRepository,
     ReadingRepository,
+    SyncMarkerRepository,
   ],
 })
 export class RepositoriesModule {}
