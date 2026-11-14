@@ -11,6 +11,7 @@ import {
   OrgPermission,
 } from '@/common/permissions/permission.constants';
 import { ROLE_NAME_MIN } from '@/common/validation/limits';
+import { ORG_PERMISSION_ENUM } from '@/common/swagger/constraints';
 
 export class CreateRoleDto {
   @ApiProperty({ example: 'editor', minLength: ROLE_NAME_MIN })
@@ -20,8 +21,7 @@ export class CreateRoleDto {
 
   @ApiProperty({
     example: ORG_PERMISSIONS.slice(0, 2),
-    enum: ORG_PERMISSIONS,
-    isArray: true,
+    ...ORG_PERMISSION_ENUM,
   })
   @IsArray()
   @IsIn(ORG_PERMISSIONS, { each: true })
@@ -37,8 +37,7 @@ export class UpdateRoleDto {
 
   @ApiPropertyOptional({
     example: ORG_PERMISSIONS.slice(0, 2),
-    enum: ORG_PERMISSIONS,
-    isArray: true,
+    ...ORG_PERMISSION_ENUM,
   })
   @IsOptional()
   @IsArray()

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-
+import { ORG_PERMISSION_ENUM } from '@/common/swagger/constraints';
 export class RoleResponseDto {
   @ApiProperty()
   id: string;
@@ -8,8 +8,8 @@ export class RoleResponseDto {
   name: string;
 
   @ApiProperty({
-    type: [String],
     description: 'Template; the real permissions are per organization',
+    ...ORG_PERMISSION_ENUM,
   })
   permissions: string[];
 }

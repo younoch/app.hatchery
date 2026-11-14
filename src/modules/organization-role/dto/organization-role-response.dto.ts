@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ORG_PERMISSION_ENUM } from '@/common/swagger/constraints';
 
 export class OrganizationRoleResponseDto {
   @ApiProperty({ description: 'The OrganizationRole row id (use it in PATCH)' })
@@ -10,7 +11,7 @@ export class OrganizationRoleResponseDto {
   @ApiProperty({ example: 'staff' })
   name: string;
 
-  @ApiProperty({ type: [String] })
+  @ApiProperty(ORG_PERMISSION_ENUM)
   permissions: string[];
 
   @ApiProperty({ description: 'false for the admin role' })

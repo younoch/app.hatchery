@@ -6260,6 +6260,32 @@
           "temporaryPassword"
         ]
       },
+      "OrgPermissionKey": {
+        "type": "string",
+        "enum": [
+          "user:create",
+          "user:read",
+          "user:write",
+          "user:reset-password",
+          "organization-role:write",
+          "tank:create",
+          "tank:write",
+          "reading:create",
+          "reading:read-all"
+        ],
+        "description": "- `user:read`: List the users of the organization (GET /users)\n- `user:create`: Create a user with a temporary password (POST /users)\n- `user:write`: Change another user's role, name or active flag (PATCH /users/{id})\n- `user:reset-password`: Set a temporary password for a user and end the user's sessions (POST /users/{id}/reset-password)\n- `organization-role:write`: Change what a role may do in the organization (PATCH /organization-roles/{id})\n- `tank:create`: Create a tank (POST /tanks)\n- `tank:write`: Rename, activate or deactivate a tank (PATCH /tanks/{id})\n- `reading:create`: Record and sync water readings (POST /readings/sync)\n- `reading:read-all`: Reserved: see every reading of the organization (no endpoint uses it yet)",
+        "x-enumDescriptions": {
+          "user:read": "List the users of the organization (GET /users)",
+          "user:create": "Create a user with a temporary password (POST /users)",
+          "user:write": "Change another user's role, name or active flag (PATCH /users/{id})",
+          "user:reset-password": "Set a temporary password for a user and end the user's sessions (POST /users/{id}/reset-password)",
+          "organization-role:write": "Change what a role may do in the organization (PATCH /organization-roles/{id})",
+          "tank:create": "Create a tank (POST /tanks)",
+          "tank:write": "Rename, activate or deactivate a tank (PATCH /tanks/{id})",
+          "reading:create": "Record and sync water readings (POST /readings/sync)",
+          "reading:read-all": "Reserved: see every reading of the organization (no endpoint uses it yet)"
+        }
+      },
       "RoleResponseDto": {
         "type": "object",
         "properties": {
@@ -6271,10 +6297,10 @@
             "example": "manager"
           },
           "permissions": {
-            "description": "Template; the real permissions are per organization",
             "type": "array",
+            "description": "Template; the real permissions are per organization",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/OrgPermissionKey"
             }
           }
         },
@@ -6299,18 +6325,7 @@
               "user:read"
             ],
             "items": {
-              "type": "string",
-              "enum": [
-                "user:create",
-                "user:read",
-                "user:write",
-                "user:reset-password",
-                "organization-role:write",
-                "tank:create",
-                "tank:write",
-                "reading:create",
-                "reading:read-all"
-              ]
+              "$ref": "#/components/schemas/OrgPermissionKey"
             }
           }
         },
@@ -6334,18 +6349,7 @@
               "user:read"
             ],
             "items": {
-              "type": "string",
-              "enum": [
-                "user:create",
-                "user:read",
-                "user:write",
-                "user:reset-password",
-                "organization-role:write",
-                "tank:create",
-                "tank:write",
-                "reading:create",
-                "reading:read-all"
-              ]
+              "$ref": "#/components/schemas/OrgPermissionKey"
             }
           }
         }
@@ -6496,7 +6500,7 @@
           "permissions": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/OrgPermissionKey"
             }
           },
           "editable": {
@@ -6519,18 +6523,7 @@
             "type": "array",
             "description": "The full new permission list (org-level keys only)",
             "items": {
-              "type": "string",
-              "enum": [
-                "user:create",
-                "user:read",
-                "user:write",
-                "user:reset-password",
-                "organization-role:write",
-                "tank:create",
-                "tank:write",
-                "reading:create",
-                "reading:read-all"
-              ]
+              "$ref": "#/components/schemas/OrgPermissionKey"
             }
           }
         },

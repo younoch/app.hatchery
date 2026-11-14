@@ -57,3 +57,21 @@ export const ORG_PERMISSIONS = ENTRIES.filter((e) => e.scope === 'org').map(
 export const PLATFORM_PERMISSIONS = ENTRIES.filter(
   (e) => e.scope === 'platform',
 ).map((e) => e.key as PlatformPermission);
+
+// One line per organization-level key. The type makes a new key without a
+// description fail to compile. Shown in `openapi.json` (OrgPermissionKey).
+export const ORG_PERMISSION_DESCRIPTIONS: Record<OrgPermission, string> = {
+  'user:read': 'List the users of the organization (GET /users)',
+  'user:create': 'Create a user with a temporary password (POST /users)',
+  'user:write':
+    "Change another user's role, name or active flag (PATCH /users/{id})",
+  'user:reset-password':
+    "Set a temporary password for a user and end the user's sessions (POST /users/{id}/reset-password)",
+  'organization-role:write':
+    'Change what a role may do in the organization (PATCH /organization-roles/{id})',
+  'tank:create': 'Create a tank (POST /tanks)',
+  'tank:write': 'Rename, activate or deactivate a tank (PATCH /tanks/{id})',
+  'reading:create': 'Record and sync water readings (POST /readings/sync)',
+  'reading:read-all':
+    'Reserved: see every reading of the organization (no endpoint uses it yet)',
+};
