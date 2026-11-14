@@ -4,7 +4,7 @@
 
 Implemented (T2–T18): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging, Swagger response schemas. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): `GET /sync/state` change markers (T24), the deployment guide (T20b), nightly backups (T20c).
+Not implemented (marked **planned** below): `GET /sync/state` change markers (T24), permission keys as an enum in `openapi.json` (T25), the deployment guide (T20b), nightly backups (T20c).
 
 Known bugs today:
 
@@ -47,6 +47,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T22 | Password maximum (Open decision #4): new passwords are 6 to 72 characters, with a letter and a number as before; `PASSWORD_MAX` in `limits.ts`, enforced inside `IsCustomStrongPassword()` and declared as `maxLength` in the schema; login keeps no maximum | done | T21b |
 | T23 | `GET /readings` (F→B-28): the caller's own readings, newest first, cursor pagination, optional `tankId`, `from`, `to`; one new index on `Reading`; response DTO, errors and `openapi.json` as usual | done | T15, T21b |
 | T24 | `GET /sync/state` (F→B-31): one change marker per resource (`organization`, `tanks`, `organizationRoles`) kept in a new `SyncMarker` table and bumped in the same transaction as every write, deletes included; response DTO, errors and `openapi.json` as usual | not started | T21b |
+| T25 | Permission keys in `openapi.json` (F→B-32 point 2): the `permissions` fields of `PATCH /organization-roles/:id` and of its answers become an enum of the organization-level keys with a description of each key (`x-enumDescriptions`), built from `PERMISSION_MAP` so they cannot drift; `openapi.json` regenerated | not started | T21b |
 ## API contract
 
 Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status": **implemented** = exists today; **planned** = decided, task in brackets. Organization-scoped endpoints take `organizationId` (query for GET, body for POST) from the **super admin only** (required); everyone else uses their own organization.
@@ -121,6 +122,40 @@ The marker lives in the `SyncMarker` table (`organizationId`, `resource`, `chang
 Not included: readings (they need `updatedAfter` and soft deletes, designed together with `GET /readings`) and users (added the same way when the frontend caches them).
 
 Errors: 401, 403 `must_change_password` or `no_organization`, 429.
+
+### Permission keys and management rules (F→B-32)
+
+Permission keys are `resource:action`. An `org` key can be stored in an organization's role. A `platform` key works only for the super admin and is never stored in an organization role: a role update that names one answers 400 `validation_failed` (field `permissions`, code `not_allowed`), and the role screen hides them. The super admin holds every key; an organization's `admin` always holds every `org` key (not stored, `editable: false`).
+
+| key | scope | guards |
+|---|---|---|
+| `user:read` | org | `GET /users` |
+| `user:create` | org | `POST /users` |
+| `user:write` | org | `PATCH /users/:id` |
+| `user:reset-password` | org | `POST /users/:id/reset-password` |
+| `organization-role:write` | org | `PATCH /organization-roles/:id` |
+| `tank:create` | org | `POST /tanks` |
+| `tank:write` | org | `PATCH /tanks/:id` (rename, activate, deactivate) |
+| `reading:create` | org | `POST /readings/sync` |
+| `reading:read-all` | org | nothing yet; reserved for organization-wide readings (parking lot) |
+| `user:delete` | platform | `DELETE /users/:id` |
+| `organization:create`, `organization:read`, `organization:transfer-admin` | platform | `POST /organizations`, `GET /organizations`, `POST /organizations/:id/transfer-admin` |
+| `role:read`, `role:create`, `role:write` | platform | `GET /roles`, `POST /roles`, `PATCH /roles/:id` |
+| `role:delete` | platform | nothing yet (no endpoint) |
+
+No key is needed for `GET /users/me`, `PATCH /users/me/password`, `GET /tanks`, `GET /organization-roles`, `GET /readings` and `GET /sync/state`: any signed-in member of an organization. The key `reading:read` does not exist; the reserved one is `reading:read-all`.
+
+Who may grant what: `PATCH /organization-roles/:id` accepts only `org` keys, and a caller may add only keys the caller holds (removing is always allowed); the `admin` row cannot be changed. The 9 `org` keys are listed above; the 8 platform keys are `user:delete`, the three `organization:*` and the four `role:*`. `openapi.json` will carry the `org` keys as an enum with a description for each (T25).
+
+Default roles of a new organization (copied from the global templates when the organization is created; a later change to a template reaches only organizations created afterwards): `admin` = all 9 `org` keys (not editable); `manager` = `user:read`, `tank:create`, `tank:write`, `reading:create`, `reading:read-all`; `staff` = `reading:create`. The three names are fixed: an organization cannot rename, add or delete roles. `GET /roles`, `POST /roles` and `PATCH /roles/:id` are platform-only; an organization's admin never calls them. For the user form, take the role list from `GET /organization-roles` and send the row's `roleId` (not its `id`); leave out `admin`, which can never be assigned.
+
+Users: `PATCH /users/:id` takes `{ roleId?, isActive?, name? }` (at least one). Changing your own `roleId` or `isActive` is 409 `cannot_target_self` (changing your own `name` is allowed). The organization's admin cannot be given another role or be deactivated by anyone in the organization: 409 `org_admin_protected`. Nobody can give the `admin` role: 403 `permission_denied`. A target outside your organization, or a super admin account: 404. `POST /users/:id/reset-password` takes `{ temporaryPassword }` (6 to 72 characters with a letter and a number, as any new password); it sets `mustChangePassword` and revokes all of the user's sessions. It is refused for your own account (409 `cannot_target_self`, use `PATCH /users/me/password`) and for the organization's admin (403 `permission_denied`, only the super admin may).
+
+`GET /users` answers `{ items, meta }` with `meta: { total, page, pageSize, totalPages, hasNextPage }`; defaults `page=1`, `pageSize=10`, maximum `pageSize` 100; newest first by creation time; every user of the organization is listed, inactive ones and the caller included; there is no filter or search (the lists are small; filter in the client; a filter can be added when a list grows). The unused parameter `includeDeleted` is accepted and ignored (parking lot).
+
+Field rules (`POST /users`): `username` 3–30 characters of `a-z 0-9 . _ -`, trimmed and lowercased by the server, unique in the whole system; `email` a valid address, trimmed and lowercased, unique in the whole system; `name` optional, at most 100 characters; `temporaryPassword` as above. A taken username or email: 409 `username_taken` or `email_taken`. Tank rules are in the `POST /tanks` row: `tank:create` guards creating, `tank:write` guards renaming and activating or deactivating. The readings of a tank that is made inactive stay stored and stay in `GET /readings`, and `POST /readings/sync` still accepts new readings for it (F→B-30). A tank cannot be deleted.
+
+Effect of changes: permissions are read from the database on every request, so a role or permission change works from the affected user's next request, and a deactivated user gets 401 `user_inactive` on the next request (their refresh tokens are revoked at once). The client's copy of `permissions` (from `GET /users/me`) changes only when it is fetched again: refetch on start, on `online` and foreground, and after any 403 `permission_denied`. Rate limit: the default of 120 requests per minute per user for all these endpoints.
 
 ### Readings sync (T15)
 
