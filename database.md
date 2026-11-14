@@ -124,8 +124,20 @@ Dormant while `EMAIL_ENABLED=false`. onDelete Cascade.
 | replacedByTokenId | String | no | - | Self FK for the grace window |
 | graceUsedAt | DateTime | no | - | Set once when the token is accepted again inside the grace window |
 
+### SyncMarker
+| field | type | required | default | notes |
+|---|---|---|---|---|
+| organizationId | String | yes | - | FK to Organization, `Cascade` |
+| resource | SyncResource | yes | - | `organization`, `tanks` or `organizationRoles` |
+| changedAt | DateTime | yes | - | Database clock, set inside the transaction of the write; strictly increasing per row (`GREATEST(clock, previous + 1 ms)`) |
+
+Primary key: `[organizationId, resource]`. One row per organization and resource, created by the first write; no row means "never written" and `GET /sync/state` answers `null`. Written only by `SyncMarkerRepository.touch`, called inside the write methods of `TankRepository`, `OrganizationRoleRepository` and `OrganizationRepository`.
+
 ### VerificationStatus (enum)
 PENDING, SENT, VERIFIED, EXPIRED.
+
+### SyncResource (enum)
+organization, tanks, organizationRoles.
 
 ## Deleting users
 
@@ -167,7 +179,11 @@ Global roles `admin`, `manager`, `staff` with the default templates from `AGENTS
 | 20261030195922_cascade_auth_tables | onDelete Cascade on EmailVerification, PasswordResetToken, RefreshToken |
 | 20261104144709_refresh_token_family | RefreshToken: familyId, replacedByTokenId, graceUsedAt, indexes |
 | 20261106065951_add_organizations | Organization, OrganizationRole, User.organizationId |
+| 20261108015541_add_tanks | Tank |
+| 20261108081710_add_readings | Reading and its first index |
+| 20261113064432_add_reading_user_index | Reading index `[createdById, recordedAt, id]` (T23) |
+| 20261114174727_add_sync_markers | SyncResource and SyncMarker (T24) |
 
 Add a row here after each migration is run (the folder name carries a timestamp).
 
-Last checked against `prisma/schema.prisma`: 2026-10-15.
+Last checked against `prisma/schema.prisma`: 2026-11-14.
