@@ -85,7 +85,7 @@ Immutable in the pilot.
 
 Indexes: `[createdById, tankId, recordedAt]` (matches the frontend's local index; serves `GET /readings` with a tank filter) and `[createdById, recordedAt, id]` (serves `GET /readings` without one; read backwards for newest first). Add `[tankId, recordedAt]` when the dashboard needs per-tank charts.
 Value limits (impossible values only) and the future-time limit are validated in the service; see `progress.md` → Readings sync.
-Deliberately absent in the pilot: `isLate`, `needsReview` (derive `isLate` from `syncedAt - recordedAt` later), `ReadingAudit`, any edit path.
+Deliberately absent in the pilot: `isLate`, `needsReview` (derive `isLate` from `syncedAt - recordedAt` later). The edit path and its audit rows (`updatedAt`, `updatedById`, `deletedAt`, `deletedById`, `ReadingRevision`) are planned in T27; this file is updated when the migration lands.
 
 ### EmailVerification
 | field | type | required | default | notes |

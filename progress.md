@@ -4,7 +4,7 @@
 
 Implemented (T2–T18): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging, Swagger response schemas. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): the deployment guide (T20b), nightly backups (T20c).
+Not implemented (marked **planned** below): organization-wide readings and the latest reading per tank (T26), corrections of synced readings (T27), the deployment guide (T20b), nightly backups (T20c).
 
 Known bugs today:
 
@@ -48,6 +48,10 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T23 | `GET /readings` (F→B-28): the caller's own readings, newest first, cursor pagination, optional `tankId`, `from`, `to`; one new index on `Reading`; response DTO, errors and `openapi.json` as usual | done | T15, T21b |
 | T24 | `GET /sync/state` (F→B-31): one change marker per resource (`organization`, `tanks`, `organizationRoles`) kept in a new `SyncMarker` table and bumped in the same transaction as every write, deletes included; response DTO, errors and `openapi.json` as usual | done | T21b |
 | T25 | Permission keys in `openapi.json` (F→B-32 point 2): the `permissions` fields of `PATCH /organization-roles/:id` and of its answers become an enum of the organization-level keys with a description of each key (`x-enumDescriptions`), built from `PERMISSION_MAP` so they cannot drift; `openapi.json` regenerated | done | T21b |
+| T26 | Organization readings (F→B-33 A): `GET /readings/organization` and `GET /readings/organization/latest` behind `reading:read-all`; `createdBy` on every reading shape (also in `GET /readings`); `order` and `limit` up to 500; new index `[tankId, recordedAt, id]`; `openapi.json` as usual | not started | T23 |
+| T27 | Corrections (F→B-33 B): `GET`, `PATCH` and `DELETE /readings/{id}`; `Reading` gets `updatedAt`, `updatedById`, `deletedAt`, `deletedById`, new table `ReadingRevision`; `updatedAt` and `editableUntil` on every reading; window `READING_EDIT_WINDOW_HOURS`; error codes `reading_not_found`, `not_author`, `edit_window_closed`, `stale_reading`; marker `readings` in `GET /sync/state`; README env table | not started | T26 |
+
+
 ## API contract
 
 Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status": **implemented** = exists today; **planned** = decided, task in brackets. Organization-scoped endpoints take `organizationId` (query for GET, body for POST) from the **super admin only** (required); everyone else uses their own organization.
@@ -76,8 +80,13 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name, organizationId? }` (`organizationId` is required for the super admin); `{ name?, isActive? }` (at least one) | the tank, same shape as a list item | implemented (T14). `name` is trimmed, 1–50 characters, unique within the organization ignoring case: a duplicate is 409 `tank_name_taken`. `PATCH` with no field: 400 `bad_request`. An inactive tank can still be renamed. A tank of another organization: 404 `tank_not_found` |
 | `POST /readings/sync` | `reading:create` | see below | see below | implemented (T15) |
 | `GET /readings` | any organization member | `tankId?`, `from?`, `to?`, `limit?`, `cursor?` | `{ items, nextCursor }` | implemented (T23); see Own readings below |
-| `GET /sync/state` | any organization member | none | `{ organization, tanks, organizationRoles }` (opaque timestamps) | implemented (T24); see Change markers below |
+| `GET /sync/state` | any organization member | none | `{ organization, tanks, organizationRoles }` (opaque timestamps; T27 adds `readings`) | implemented (T24); see Change markers below |
 | `GET /health` | none | — | `{ status, info, error, details }` | implemented |
+| `GET /readings/organization` | `reading:read-all` | `tankId?`, `userId?`, `from?`, `to?`, `order?`, `limit?`, `cursor?` | `{ items, nextCursor }`, every item with `createdBy` | planned (T26); see Organization readings below |
+| `GET /readings/organization/latest` | `reading:read-all` | none | `{ items }`: the newest reading of each tank | planned (T26) |
+| `GET /readings/:id` | the author, or `reading:read-all` | none | the reading | planned (T27); see Corrections below |
+| `PATCH /readings/:id` | `reading:create`, author only | `{ expectedUpdatedAt, tankId?, recordedAt?, ph?, temperatureC?, salinityPpt?, oxygenMgL?, note? }` | the reading | planned (T27) |
+| `DELETE /readings/:id` | `reading:create`, author only | none | `{ message }` | planned (T27) |
 
 **User shape** (T11a): `{ id, username, email, name, isActive, mustChangePassword, organizationId, role: { id, name } | null, createdAt }`. The role carries no permissions: the global role's list is only a template, the real permissions are per organization.
 
@@ -157,6 +166,36 @@ Field rules (`POST /users`): `username` 3–30 characters of `a-z 0-9 . _ -`, tr
 
 Effect of changes: permissions are read from the database on every request, so a role or permission change works from the affected user's next request, and a deactivated user gets 401 `user_inactive` on the next request (their refresh tokens are revoked at once). The client's copy of `permissions` (from `GET /users/me`) changes only when it is fetched again: refetch on start, on `online` and foreground, and after any 403 `permission_denied`. Rate limit: the default of 120 requests per minute per user for all these endpoints.
 
+### Organization readings (T26)
+
+Both endpoints need `reading:read-all` (403 `permission_denied` without it) and a user with an organization (403 `no_organization`; the super admin has none). They are online-only views; nothing here changes how the phone syncs.
+
+`GET /readings/organization` — query: `tankId` (uuid; a tank of another organization: 404 `tank_not_found`), `userId` (uuid; an unknown user gives an empty list), `from` (inclusive) and `to` (exclusive) as in `GET /readings`, `order` (`asc` or `desc`, default `desc`; a chart wants `asc`), `limit` (1–500, default 100), `cursor` (the previous `nextCursor`, used unchanged with the same filters and the same `order`). Answer `data`: `{ items, nextCursor }`, `nextCursor` null on the last page, no `total`. Ordered by `recordedAt`, ties by `id` (descending for `desc`, ascending for `asc`). Deleted readings (T27) are not listed.
+
+`GET /readings/organization/latest` — no query. Answer `data`: `{ items }`, the newest reading of each tank of the organization that has at least one reading (tanks without readings are absent; inactive tanks are included, match by `tankId` against `GET /tanks`). No order is promised. No min/max/average summary is provided: the client computes it from the list.
+
+Every reading in these two answers and in `GET /readings` has the shape `{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxygenMgL, note, syncedAt, createdBy: { id, username, name } }` (`name` is null when the user has none). T27 adds `updatedAt` and `editableUntil` to it.
+
+### Corrections (T27)
+
+The author may correct or delete a synced reading for a limited time. Nobody else can: not even an admin.
+
+Window: `READING_EDIT_WINDOW_HOURS` (default 24) counted from `syncedAt` (the server's creation time, so a late entry is still correctable); a correction does not extend it. `editableUntil` is returned on every reading: `syncedAt` plus the window for the author when the author holds `reading:create`, `null` for everybody else. It may lie in the past: the window is closed. The client may use it to hide the edit button (allow for clock skew) but the server decides.
+
+Reading shape, from T27: the T26 shape plus `updatedAt` (when the reading was stored, and again on every correction) and `editableUntil`.
+
+`GET /readings/:id` — the author, or a holder of `reading:read-all` of the same organization. Anything else, a deleted reading or a reading of another organization: 404 `reading_not_found`. Its purpose is to fetch the current state after a 409.
+
+`PATCH /readings/:id` — needs `reading:create`. Body: `expectedUpdatedAt` (required, ISO 8601 with a time zone: the `updatedAt` the client holds) and at least one of `tankId`, `recordedAt`, `ph`, `temperatureC`, `salinityPpt`, `oxygenMgL`, `note` (`null` clears the note). The value rules are those of a sync item: the hard limits, `recordedAt` not before 2020-01-01 and not more than `READING_FUTURE_TOLERANCE_MS` ahead, `note` up to 200 characters, `tankId` a tank of the organization (404 `tank_not_found`; an inactive tank is accepted). Fields such as `id`, `createdById`, `syncedAt`, `updatedAt` are refused (400 `validation_failed`, `not_allowed`). Checks in this order: 400 `validation_failed` (field `errors` as in `POST /readings/sync`); 404 `reading_not_found`; 403 `not_author`; if every sent field already holds the sent value, 200 with the current reading and nothing changes (so repeating a request is harmless, and it skips the next two checks); 403 `edit_window_closed`; 409 `stale_reading` when `expectedUpdatedAt` differs from the stored `updatedAt`. Then the row is updated (`updatedAt`, `updatedById`), the previous values go to a `ReadingRevision` row, and the `readings` marker moves, in one transaction. Answer: the updated reading.
+
+`DELETE /readings/:id` — needs `reading:create`, no body, no `expectedUpdatedAt`: deleting means "remove whatever is stored". Soft delete (`deletedAt`, `deletedById`), the previous values go to a `ReadingRevision` row, the `readings` marker moves. Checks: 404 `reading_not_found`, 403 `not_author`, 403 `edit_window_closed`. Answer `{ message }`. A repeated `DELETE` of an already deleted reading by its author answers 200; anyone else gets 404.
+
+The `id` of a deleted reading stays taken. A phone that still holds the original and syncs it again gets `duplicate` (with `identical: false` after a correction); the server's copy is the truth.
+
+Marker: `GET /sync/state` gains `readings`. It moves when an existing reading of the organization is corrected or deleted; new readings do not move it (they appear at the newest end of the list). A phone whose `readings` marker differs refetches its window with `GET /readings`; deleted readings are gone from the answer and corrected ones carry a new `updatedAt`. Tombstones and an `updatedAfter` cursor are parked.
+
+New error codes: `reading_not_found` 404, `not_author` 403, `edit_window_closed` 403, `stale_reading` 409. Rate limit: `PATCH /readings/:id` and `DELETE /readings/:id` 30 per minute per user each; the rest use the default.
+
 ### Readings sync (T15)
 
 "Batch" is reserved for the hatchery production batch (frontend Step 25); this endpoint is "sync".
@@ -187,7 +226,7 @@ Server rules:
 * `tankId` must belong to the caller's organization (super admin: any organization), else `tank_not_found`. Inactive tanks are accepted.
 * Same `id` from another user → `id_conflict`.
 * `identical` compares `tankId`, `recordedAt` (as an instant), the four values and `note`.
-* No edit or delete after sync: a correction is a new reading. "Last value" prefill stays per user and local to the phone. Organization-wide viewing is online only, later, behind `reading:read-all`.
+* The author may correct or delete a synced reading for a limited time (T27, see Corrections); after that a correction is a new reading. "Last value" prefill stays per user and local to the phone. Organization-wide viewing is online only (T26), behind `reading:read-all`.
 * Permission changes reach the client at its next `GET /users/me`; the server enforces them immediately (403 `permission_denied`, pending items kept).
 
 ### Changes the frontend must follow
@@ -276,6 +315,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-13: `GET /sync/state` (F→B-31). Change markers are rows of a new `SyncMarker` table, bumped with the database clock inside the transaction of every write (deletes included), not derived from `max(updatedAt)`, which cannot see a delete. Timestamp, not a counter (the owner's preference); the client compares by difference. Resources: `organization`, `tanks`, `organizationRoles`; readings and users are not part of it yet. `createdAt` and `updatedAt` on Tank, Organization and OrganizationRole are not needed for this and stay in the parking lot.
 * 2026-11-14: `GET /sync/state` released (T24). The bump is inside the repositories' write methods (not in the services), joins the caller's transaction or opens its own, and is strictly increasing (`GREATEST(clock_timestamp(), previous + 1 ms)`), so the frontend's "two writes in the same millisecond" case cannot happen. `null` means never written (organizations and tanks that existed before the migration answer `null` until their next write). Not covered: a platform rename of a global role (`PATCH /roles/:id`) does not move `organizationRoles` (parking lot).
 * 2026-11-14: T25. The nine organization-level keys are one named schema, `OrgPermissionKey`, referenced by the five permission lists (`UpdateOrganizationRoleDto`, `OrganizationRoleResponseDto`, `CreateRoleDto`, `UpdateRoleDto`, `RoleResponseDto`). Descriptions live in `ORG_PERMISSION_DESCRIPTIONS` (typed `Record<OrgPermission, string>`, so a new key without a description does not compile) and are added to the schema in `buildOpenApiDocument`. `MeResponseDto.permissions` stays `string[]`.
+* 2026-11-17: F→B-33. The owner chose corrections: the author edits or deletes his own reading until a server-set time (T27); open decision 3 (`ReadingAudit` + PATCH) is closed. Window = `READING_EDIT_WINDOW_HOURS` (default 24) from `syncedAt`, not extended by a correction; the server returns `editableUntil`. Optimistic lock: `expectedUpdatedAt` on `PATCH` (409 `stale_reading`), none on `DELETE`; a repeated identical `PATCH` is a 200 no-op. Soft delete; the previous values of every correction go to `ReadingRevision` (no endpoint reads it yet). Other phones learn of corrections through the `readings` marker (not moved by new readings); `updatedAfter`/tombstones are parked. Organization readings (T26) are a separate path behind `reading:read-all`, `limit` up to 500, `order`, `userId`, plus `/latest`; no server-side min/max/average.
 
 
 ## Open decisions
@@ -284,15 +324,14 @@ Field staff often share one public IP, so authenticated traffic is never limited
 |---|---|---|
 | 1 | Real hatchery value ranges (pH, temperature, salinity, oxygen) for review flags — the frontend's sample ranges are not confirmed | before `needsReview` is ever built |
 | 2 | Mail provider and the day email is switched on (Brevo free tier is the candidate; needs a domain with SPF/DKIM) | when admins stop being able to handle resets |
-| 3 | Whether to bring back `ReadingAudit` + PATCH | before the dashboard |
 | 4 | Minimum length for new passwords: 6 today (plus a letter and a number); the seed script already demands 8. Raise the API to 8 for `temporaryPassword` and `newPassword` (login keeps accepting 6 or more, so existing accounts still sign in)? | before real users are created |
 
 ## Parking lot
 
 * Change markers: a platform edit of a global role's name (`PATCH /roles/:id`) does not move `organizationRoles` in any organization; add a marker bump for all organizations if renames ever happen. `users` is not a marker resource yet (add it the same way when the frontend caches users)
 * Refresh token absolute maximum age (e.g. 90 days) together with token families (T16)
-* `ReadingAudit` and an audited PATCH for synced readings; `isLate` derived from `syncedAt - recordedAt`; `needsReview` once ranges are confirmed
-* Pull sync (cursor `syncedAt`, not `recordedAt`), `GET /readings` (organization-wide, `reading:read-all`), dashboard index `[tankId, recordedAt]`
+* `isLate` derived from `syncedAt - recordedAt`; `needsReview` once ranges are confirmed
+* Pull sync with tombstones (an `updatedAfter` cursor), so a phone learns of corrections and deletes without refetching its window; a read endpoint for `ReadingRevision` (history of a reading)
 * Email: switch-on checklist, verification flow, email-based reset, invitation flow
 * Dedicated VPS later: buy a domain and use `app.` and `api.` subdomains (cookie `SameSite=lax`, `REFRESH_COOKIE_PATH` back to `/auth/refresh`); HTTPS with Caddy; a mail provider needs the same domain
 * Security headers with `helmet` (new dependency: ask the owner first)
