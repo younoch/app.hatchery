@@ -15,3 +15,6 @@ export const READINGS_PAGE_MAX = 100;
 
 export const RECORDED_AT_FORMAT =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+export const ORG_READINGS_PAGE_DEFAULT = 100;
+export const ORG_READINGS_PAGE_MAX = 500;

@@ -18,7 +18,12 @@ import {
   RECORDED_AT_FORMAT,
 } from './reading.constants';
 import type { ListReadingsQueryDto } from './dto/list-readings-query.dto';
-import type { ReadingListResponseDto } from './dto/reading-response.dto';
+import type { ListOrganizationReadingsQueryDto } from './dto/list-organization-readings-query.dto';
+import type {
+  ReadingLatestResponseDto,
+  ReadingListResponseDto,
+} from './dto/reading-response.dto';
+import type { ReadingWithAuthor } from '@/common/repositories/reading.repository';
 import { toReadingResponse } from './reading.mapper';
 
 interface ValidItem {
@@ -68,6 +73,70 @@ export class ReadingService {
       );
     }
 
+    const { from, to, after } = this.parsePageQuery(query);
+    const rows = await this.readingRepository.findPageForUser({
+      userId: caller.userId,
+      tankId: query.tankId,
+      from,
+      to,
+      after,
+      order: 'desc',
+      take: query.limit + 1,
+    });
+    return this.toPage(rows, query.limit);
+  }
+
+  async listOrganization(
+    query: ListOrganizationReadingsQueryDto,
+    caller: JwtUser,
+  ): Promise<ReadingListResponseDto> {
+    const organizationId = this.requireOrganization(caller);
+    const { from, to, after } = this.parsePageQuery(query);
+    if (query.tankId) {
+      const tank = await this.tankRepository.findById(query.tankId);
+      if (!tank || tank.organizationId !== organizationId) {
+        throw new AppException(
+          HttpStatus.NOT_FOUND,
+          ErrorCode.TANK_NOT_FOUND,
+          'Tank not found',
+        );
+      }
+    }
+    const rows = await this.readingRepository.findPageForOrganization({
+      organizationId,
+      tankId: query.tankId,
+      userId: query.userId,
+      from,
+      to,
+      after,
+      order: query.order,
+      take: query.limit + 1,
+    });
+    return this.toPage(rows, query.limit);
+  }
+
+  async listLatestPerTank(caller: JwtUser): Promise<ReadingLatestResponseDto> {
+    const organizationId = this.requireOrganization(caller);
+    const rows = await this.readingRepository.findLatestPerTank(organizationId);
+    return { items: rows.map(toReadingResponse) };
+  }
+
+  private requireOrganization(caller: JwtUser): string {
+    if (!caller.organizationId) {
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        ErrorCode.NO_ORGANIZATION,
+        'User has no organization',
+      );
+    }
+    return caller.organizationId;
+  }
+
+  private parsePageQuery(query: {
+    from?: string;
+    to?: string;
+    cursor?: string;
+  }) {
     const errors: FieldError[] = [];
     const from = this.parseBound('from', query.from, errors);
     const to = this.parseBound('to', query.to, errors);
@@ -83,21 +152,18 @@ export class ReadingService {
         errors,
       );
     }
+    return { from, to, after };
+  }
 
-    const rows = await this.readingRepository.findPageForUser({
-      userId: caller.userId,
-      tankId: query.tankId,
-      from,
-      to,
-      after,
-      take: query.limit + 1,
-    });
-    const items = rows.slice(0, query.limit);
+  private toPage(
+    rows: ReadingWithAuthor[],
+    limit: number,
+  ): ReadingListResponseDto {
+    const items = rows.slice(0, limit);
     const last = items[items.length - 1];
     return {
       items: items.map(toReadingResponse),
-      nextCursor:
-        rows.length > query.limit && last ? this.encodeCursor(last) : null,
+      nextCursor: rows.length > limit && last ? this.encodeCursor(last) : null,
     };
   }
 

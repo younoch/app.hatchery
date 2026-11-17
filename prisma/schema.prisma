@@ -124,6 +124,7 @@ model Reading {
 
   @@index([createdById, tankId, recordedAt])
   @@index([createdById, recordedAt, id])
+  @@index([tankId, recordedAt, id])
 }
 
 enum VerificationStatus {

@@ -20,7 +20,11 @@ import { ApiEnvelope, ApiErrors } from '@/common/swagger/api-envelope';
 import { SyncReadingsResponseDto } from './dto/sync-readings-response.dto';
 import { ERRORS_PERMISSION, ERRORS_SESSION } from '@/common/swagger/error-sets';
 import { ListReadingsQueryDto } from './dto/list-readings-query.dto';
-import { ReadingListResponseDto } from './dto/reading-response.dto';
+import { ListOrganizationReadingsQueryDto } from './dto/list-organization-readings-query.dto';
+import {
+  ReadingLatestResponseDto,
+  ReadingListResponseDto,
+} from './dto/reading-response.dto';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
@@ -52,5 +56,32 @@ export class ReadingController {
     @CurrentUser() currentUser: JwtUser,
   ) {
     return this.readingService.list(query, currentUser);
+  }
+
+  
+  @RequirePermission('reading:read-all')
+  @UseGuards(PermissionsGuard)
+  @ApiEnvelope(ReadingListResponseDto)
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'no_organization',
+    'validation_failed',
+    'tank_not_found',
+  )
+  @Get('organization')
+  listOrganization(
+    @Query() query: ListOrganizationReadingsQueryDto,
+    @CurrentUser() currentUser: JwtUser,
+  ) {
+    return this.readingService.listOrganization(query, currentUser);
+  }
+
+  @RequirePermission('reading:read-all')
+  @UseGuards(PermissionsGuard)
+  @ApiEnvelope(ReadingLatestResponseDto)
+  @ApiErrors(...ERRORS_PERMISSION, 'no_organization')
+  @Get('organization/latest')
+  latestPerTank(@CurrentUser() currentUser: JwtUser) {
+    return this.readingService.listLatestPerTank(currentUser);
   }
 }

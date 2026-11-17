@@ -1,7 +1,9 @@
-import type { Reading } from '@prisma/client';
+import type { ReadingWithAuthor } from '@/common/repositories/reading.repository';
 import type { ReadingResponseDto } from './dto/reading-response.dto';
 
-export function toReadingResponse(reading: Reading): ReadingResponseDto {
+export function toReadingResponse(
+  reading: ReadingWithAuthor,
+): ReadingResponseDto {
   return {
     id: reading.id,
     tankId: reading.tankId,
@@ -12,5 +14,10 @@ export function toReadingResponse(reading: Reading): ReadingResponseDto {
     oxygenMgL: reading.oxygenMgL,
     note: reading.note,
     syncedAt: reading.syncedAt.toISOString(),
+    createdBy: {
+      id: reading.createdBy.id,
+      username: reading.createdBy.username,
+      name: reading.createdBy.name,
+    },
   };
 }

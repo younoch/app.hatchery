@@ -1,6 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { UUID_SCHEMA } from '@/common/swagger/constraints';
 
+export class ReadingAuthorDto {
+  @ApiProperty(UUID_SCHEMA)
+  id: string;
+
+  @ApiProperty({ example: 'rahim' })
+  username: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  name: string | null;
+}
 export class ReadingResponseDto {
   @ApiProperty(UUID_SCHEMA)
   id: string;
@@ -28,6 +38,9 @@ export class ReadingResponseDto {
 
   @ApiProperty({ format: 'date-time', description: 'UTC' })
   syncedAt: string;
+
+  @ApiProperty({ type: () => ReadingAuthorDto })
+  createdBy: ReadingAuthorDto;
 }
 
 export class ReadingListResponseDto {
@@ -40,4 +53,15 @@ export class ReadingListResponseDto {
     description: 'Null on the last page',
   })
   nextCursor: string | null;
+}
+
+
+export class ReadingLatestResponseDto {
+  @ApiProperty({
+    type: () => ReadingResponseDto,
+    isArray: true,
+    description:
+      'The newest reading of each tank that has one; no order is promised',
+  })
+  items: ReadingResponseDto[];
 }
