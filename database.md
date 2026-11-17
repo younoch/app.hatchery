@@ -83,7 +83,7 @@ Immutable in the pilot.
 | recordedAt | DateTime | yes | - | From the client (ISO 8601 with a time zone). Not before 2020-01-01; more than 10 minutes in the future is rejected |
 | syncedAt | DateTime | yes | now() | Set by the server only |
 
-Indexes: `[createdById, tankId, recordedAt]` (matches the frontend's local index; serves `GET /readings` with a tank filter) and `[createdById, recordedAt, id]` (serves `GET /readings` without one; read backwards for newest first). Add `[tankId, recordedAt]` when the dashboard needs per-tank charts.
+Indexes: `[createdById, tankId, recordedAt]` (matches the frontend's local index; serves `GET /readings` with a tank filter) and `[createdById, recordedAt, id]` (serves `GET /readings` without one; read backwards for newest first). `[tankId, recordedAt, id]` serves the organization readings (`GET /readings/organization` and `/latest`, T26).
 Value limits (impossible values only) and the future-time limit are validated in the service; see `progress.md` → Readings sync.
 Deliberately absent in the pilot: `isLate`, `needsReview` (derive `isLate` from `syncedAt - recordedAt` later). The edit path and its audit rows (`updatedAt`, `updatedById`, `deletedAt`, `deletedById`, `ReadingRevision`) are planned in T27; this file is updated when the migration lands.
 
@@ -183,6 +183,7 @@ Global roles `admin`, `manager`, `staff` with the default templates from `AGENTS
 | 20261108081710_add_readings | Reading and its first index |
 | 20261113064432_add_reading_user_index | Reading index `[createdById, recordedAt, id]` (T23) |
 | 20261114174727_add_sync_markers | SyncResource and SyncMarker (T24) |
+| 20261117073441_add_reading_tank_index | Reading index `[tankId, recordedAt, id]` (T26) |
 
 Add a row here after each migration is run (the folder name carries a timestamp).
 
