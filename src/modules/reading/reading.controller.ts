@@ -1,9 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -24,7 +27,10 @@ import { ListOrganizationReadingsQueryDto } from './dto/list-organization-readin
 import {
   ReadingLatestResponseDto,
   ReadingListResponseDto,
+  ReadingResponseDto,
 } from './dto/reading-response.dto';
+import { UpdateReadingDto } from './dto/update-reading.dto';
+import { MessageResponseDto } from '@/common/swagger/message-response.dto';
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
@@ -83,5 +89,49 @@ export class ReadingController {
   @Get('organization/latest')
   latestPerTank(@CurrentUser() currentUser: JwtUser) {
     return this.readingService.listLatestPerTank(currentUser);
+  }
+
+  @ApiEnvelope(ReadingResponseDto)
+  @ApiErrors(...ERRORS_SESSION, 'no_organization', 'reading_not_found')
+  @Get(':id')
+  getOne(@Param('id') id: string, @CurrentUser() currentUser: JwtUser) {
+    return this.readingService.getOne(id, currentUser);
+  }
+
+  @RequirePermission('reading:create')
+  @UseGuards(PermissionsGuard)
+  @ApiEnvelope(ReadingResponseDto)
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'no_organization',
+    'validation_failed',
+    'reading_not_found',
+    'not_author',
+    'tank_not_found',
+    'edit_window_closed',
+    'stale_reading',
+  )
+  @Patch(':id')
+  correct(
+    @Param('id') id: string,
+    @Body() dto: UpdateReadingDto,
+    @CurrentUser() currentUser: JwtUser,
+  ) {
+    return this.readingService.correct(id, dto, currentUser);
+  }
+
+  @RequirePermission('reading:create')
+  @UseGuards(PermissionsGuard)
+  @ApiEnvelope(MessageResponseDto)
+  @ApiErrors(
+    ...ERRORS_PERMISSION,
+    'no_organization',
+    'reading_not_found',
+    'not_author',
+    'edit_window_closed',
+  )
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() currentUser: JwtUser) {
+    return this.readingService.remove(id, currentUser);
   }
 }

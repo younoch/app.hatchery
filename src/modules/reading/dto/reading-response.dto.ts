@@ -39,6 +39,22 @@ export class ReadingResponseDto {
   @ApiProperty({ format: 'date-time', description: 'UTC' })
   syncedAt: string;
 
+  @ApiProperty({
+    format: 'date-time',
+    description:
+      'UTC. When the reading was stored, and again on every correction; send it back as expectedUpdatedAt',
+  })
+  updatedAt: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description:
+      'UTC. Until when the author may correct or delete it; null for everybody else. May lie in the past (window closed)',
+  })
+  editableUntil: string | null;
+
   @ApiProperty({ type: () => ReadingAuthorDto })
   createdBy: ReadingAuthorDto;
 }

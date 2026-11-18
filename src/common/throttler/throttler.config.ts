@@ -7,11 +7,14 @@ const MINUTE = 60_000;
 const LOGIN_PATH = '/auth/login';
 const REFRESH_PATH = '/auth/refresh';
 const SYNC_PATH = '/readings/sync';
+const READING_PATH = /^\/readings\/[^/]+$/;
 const MAX_NAME_LENGTH = 64;
 
 export const THROTTLER = {
   USER: 'user',
   SYNC: 'sync',
+  CORRECT: 'correct',
+  REMOVE: 'remove',
   IP: 'ip',
   LOGIN_USER: 'login-user',
   LOGIN_IP: 'login-ip',
@@ -51,6 +54,10 @@ export function createThrottlerOptions(
   const isPath = (context: ExecutionContext, path: string) =>
     getRequest(context).path === path;
   const ip = (req: Request) => req.ip ?? 'unknown';
+  const isReadingCall = (context: ExecutionContext, method: string) => {
+    const req = getRequest(context);
+    return req.method === method && READING_PATH.test(req.path);
+  };
 
   const getLoginName = (req: Request): string => {
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -82,6 +89,24 @@ export function createThrottlerOptions(
         limit: 30,
         skipIf: (context) =>
           !getUserId(getRequest(context)) || !isPath(context, SYNC_PATH),
+        getTracker: (req) => getUserId(req as Request) ?? ip(req as Request),
+        generateKey,
+      },
+      {
+        name: THROTTLER.CORRECT,
+        ttl: MINUTE,
+        limit: 30,
+        skipIf: (context) =>
+          !getUserId(getRequest(context)) || !isReadingCall(context, 'PATCH'),
+        getTracker: (req) => getUserId(req as Request) ?? ip(req as Request),
+        generateKey,
+      },
+      {
+        name: THROTTLER.REMOVE,
+        ttl: MINUTE,
+        limit: 30,
+        skipIf: (context) =>
+          !getUserId(getRequest(context)) || !isReadingCall(context, 'DELETE'),
         getTracker: (req) => getUserId(req as Request) ?? ip(req as Request),
         generateKey,
       },

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/common/prisma/prisma.service';
-
+import { runInTransaction } from '@/common/prisma/run-in-transaction';
+import { SyncMarkerRepository } from './sync-marker.repository';
 
 export type ReadingOrder = 'asc' | 'desc';
 
@@ -12,6 +13,20 @@ const READING_WITH_AUTHOR = {
 export type ReadingWithAuthor = Prisma.ReadingGetPayload<{
   include: typeof READING_WITH_AUTHOR;
 }>;
+
+const READING_DETAIL = {
+  ...READING_WITH_AUTHOR,
+  tank: { select: { organizationId: true } },
+} satisfies Prisma.ReadingInclude;
+
+export type ReadingDetail = Prisma.ReadingGetPayload<{
+  include: typeof READING_DETAIL;
+}>;
+
+export type ReadingChanges = Pick<
+  Prisma.ReadingUncheckedUpdateManyInput,
+  'tankId' | 'recordedAt' | 'ph' | 'temperatureC' | 'salinityPpt' | 'oxygenMgL' | 'note'
+>;
 
 interface PageParams {
   from?: Date;
@@ -57,7 +72,78 @@ function pageWhere(
 
 @Injectable()
 export class ReadingRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly syncMarkers: SyncMarkerRepository,
+  ) {}
+
+  // Includes deleted readings: their ids stay taken.
+  findDetail(id: string) {
+    return this.prisma.reading.findUnique({
+      where: { id },
+      include: READING_DETAIL,
+    });
+  }
+
+  // False when the reading changed or was deleted since `reading` was read.
+  correct(params: {
+    reading: ReadingDetail;
+    expectedUpdatedAt: Date;
+    changedById: string;
+    changes: ReadingChanges;
+  }): Promise<boolean> {
+    const { reading, expectedUpdatedAt, changedById, changes } = params;
+    return runInTransaction(this.prisma, undefined, async (tx) => {
+      const updatedAt = new Date(
+        Math.max(Date.now(), reading.updatedAt.getTime() + 1),
+      );
+      const result = await tx.reading.updateMany({
+        where: { id: reading.id, updatedAt: expectedUpdatedAt, deletedAt: null },
+        data: { ...changes, updatedAt, updatedById: changedById },
+      });
+      if (result.count === 0) return false;
+      await this.recordRevision(tx, reading, 'correction', changedById);
+      await this.syncMarkers.touch(reading.tank.organizationId, 'readings', tx);
+      return true;
+    });
+  }
+
+  // False when somebody else deleted it first.
+  softDelete(reading: ReadingDetail, changedById: string): Promise<boolean> {
+    return runInTransaction(this.prisma, undefined, async (tx) => {
+      const result = await tx.reading.updateMany({
+        where: { id: reading.id, deletedAt: null },
+        data: { deletedAt: new Date(), deletedById: changedById },
+      });
+      if (result.count === 0) return false;
+      await this.recordRevision(tx, reading, 'delete', changedById);
+      await this.syncMarkers.touch(reading.tank.organizationId, 'readings', tx);
+      return true;
+    });
+  }
+
+  private recordRevision(
+    tx: Prisma.TransactionClient,
+    reading: ReadingDetail,
+    kind: 'correction' | 'delete',
+    changedById: string,
+  ) {
+    return tx.readingRevision.create({
+      data: {
+        readingId: reading.id,
+        kind,
+        changedById,
+        previousUpdatedAt: reading.updatedAt,
+        previousTankId: reading.tankId,
+        previousRecordedAt: reading.recordedAt,
+        previousPh: reading.ph,
+        previousTemperatureC: reading.temperatureC,
+        previousSalinityPpt: reading.salinityPpt,
+        previousOxygenMgL: reading.oxygenMgL,
+        previousNote: reading.note,
+      },
+    });
+  }
 
   findManyByIds(ids: string[]) {
     return this.prisma.reading.findMany({ where: { id: { in: ids } } });
@@ -73,7 +159,7 @@ export class ReadingRepository {
     const { userId, tankId, take, ...page } = params;
     return this.prisma.reading.findMany({
       where: pageWhere(
-        { createdById: userId, ...(tankId ? { tankId } : {}) },
+        { createdById: userId, deletedAt: null, ...(tankId ? { tankId } : {}) },
         page,
       ),
       include: READING_WITH_AUTHOR,
@@ -94,6 +180,7 @@ export class ReadingRepository {
       where: pageWhere(
         {
           tank: { organizationId },
+          deletedAt: null,
           ...(tankId ? { tankId } : {}),
           ...(userId ? { createdById: userId } : {}),
         },
@@ -112,6 +199,7 @@ export class ReadingRepository {
       FROM "Reading" r
       JOIN "Tank" t ON t."id" = r."tankId"
       WHERE t."organizationId" = ${organizationId}
+        AND r."deletedAt" IS NULL
       ORDER BY r."tankId", r."recordedAt" DESC, r."id" DESC
     `;
     if (rows.length === 0) return [];

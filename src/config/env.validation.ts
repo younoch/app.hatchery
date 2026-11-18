@@ -83,6 +83,11 @@ const envSchema = z
       .int()
       .positive()
       .default(600000),
+    READING_EDIT_WINDOW_HOURS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(24),
   })
   .superRefine((env, context) => {
     const secure =

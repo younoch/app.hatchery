@@ -21,7 +21,10 @@ model User {
   emailVerifications EmailVerification[]
   passwordResetTokens PasswordResetToken[]
   refreshTokens RefreshToken[]
-  readings      Reading[]
+  readings      Reading[] @relation("ReadingCreatedBy")
+  readingsUpdated Reading[] @relation("ReadingUpdatedBy")
+  readingsDeleted Reading[] @relation("ReadingDeletedBy")
+  readingRevisions ReadingRevision[] @relation("ReadingRevisionBy")
   isSuperAdmin  Boolean  @default(false)
   roleId String?
   role   Role?   @relation(fields: [roleId], references: [id])
@@ -113,7 +116,7 @@ model Reading {
   tankId       String
   tank         Tank     @relation(fields: [tankId], references: [id], onDelete: Restrict)
   createdById  String
-  createdBy    User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy    User     @relation("ReadingCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   ph           Float
   temperatureC Float
   salinityPpt  Float
@@ -121,10 +124,43 @@ model Reading {
   note         String?
   recordedAt   DateTime
   syncedAt     DateTime @default(now())
+  updatedAt    DateTime @default(now())
+  updatedById  String?
+  updatedBy    User?    @relation("ReadingUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  deletedAt    DateTime?
+  deletedById  String?
+  deletedBy    User?    @relation("ReadingDeletedBy", fields: [deletedById], references: [id], onDelete: Restrict)
+  revisions    ReadingRevision[]
 
   @@index([createdById, tankId, recordedAt])
   @@index([createdById, recordedAt, id])
   @@index([tankId, recordedAt, id])
+}
+
+enum ReadingRevisionKind {
+  correction
+  delete
+}
+
+// The values a reading had before a correction or a delete (T27).
+model ReadingRevision {
+  id                   String              @id @default(uuid())
+  readingId            String
+  reading              Reading             @relation(fields: [readingId], references: [id], onDelete: Restrict)
+  kind                 ReadingRevisionKind
+  changedById          String
+  changedBy            User                @relation("ReadingRevisionBy", fields: [changedById], references: [id], onDelete: Restrict)
+  changedAt            DateTime            @default(now())
+  previousUpdatedAt    DateTime
+  previousTankId       String
+  previousRecordedAt   DateTime
+  previousPh           Float
+  previousTemperatureC Float
+  previousSalinityPpt  Float
+  previousOxygenMgL    Float
+  previousNote         String?
+
+  @@index([readingId, changedAt])
 }
 
 enum VerificationStatus {
@@ -138,6 +174,7 @@ enum SyncResource {
   organization
   tanks
   organizationRoles
+  readings
 }
 
 model SyncMarker {

@@ -27,6 +27,7 @@ export class SyncService {
       organization: at('organization'),
       tanks: at('tanks'),
       organizationRoles: at('organizationRoles'),
+      readings: at('readings'),
     };
   }
 }

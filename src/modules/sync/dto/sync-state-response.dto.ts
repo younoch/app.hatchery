@@ -28,4 +28,11 @@ export class SyncStateResponseDto {
       'Change marker of the organization role list (permissions); null when never written',
   })
   organizationRoles: string | null;
+
+  @ApiProperty({
+    ...MARKER,
+    description:
+      'Change marker of corrections: moves when an existing reading of the organization is corrected or deleted, not when a new one is synced; null when never changed',
+  })
+  readings: string | null;
 }

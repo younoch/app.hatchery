@@ -7,7 +7,12 @@ import { AppException, FieldError } from '@/common/errors/app.exception';
 import { ErrorCode } from '@/common/errors/error-codes';
 import { toFieldErrors } from '@/common/errors/validation-exception.factory';
 import type { JwtUser } from '@/common/types/jwt-user.type';
-import { ReadingRepository } from '@/common/repositories/reading.repository';
+import {
+  ReadingRepository,
+  type ReadingChanges,
+  type ReadingDetail,
+} from '@/common/repositories/reading.repository';
+import { UserPermissionResolver } from '@/common/permissions/user-permission.resolver';
 import { TankRepository } from '@/common/repositories/tank.repository';
 import { ReadingItemDto } from './dto/reading-item.dto';
 import { SyncReadingsDto } from './dto/sync-readings.dto';
@@ -24,7 +29,9 @@ import type {
   ReadingListResponseDto,
 } from './dto/reading-response.dto';
 import type { ReadingWithAuthor } from '@/common/repositories/reading.repository';
-import { toReadingResponse } from './reading.mapper';
+import { toReadingResponse, type ReadingViewer } from './reading.mapper';
+import type { UpdateReadingDto } from './dto/update-reading.dto';
+import type { ReadingResponseDto } from './dto/reading-response.dto';
 
 interface ValidItem {
   index: number;
@@ -50,15 +57,19 @@ function echoId(raw: unknown): { id?: string } {
 export class ReadingService {
   private readonly logger = new Logger(ReadingService.name);
   private readonly futureToleranceMs: number;
+  private readonly editWindowMs: number;
 
   constructor(
     private readonly readingRepository: ReadingRepository,
     private readonly tankRepository: TankRepository,
+    private readonly permissionResolver: UserPermissionResolver,
     configService: ConfigService,
   ) {
     this.futureToleranceMs = configService.getOrThrow<number>(
       'READING_FUTURE_TOLERANCE_MS',
     );
+    this.editWindowMs =
+      configService.getOrThrow<number>('READING_EDIT_WINDOW_HOURS') * 3_600_000;
   }
 
     async list(
@@ -83,7 +94,7 @@ export class ReadingService {
       order: 'desc',
       take: query.limit + 1,
     });
-    return this.toPage(rows, query.limit);
+    return this.toPage(rows, query.limit, await this.viewer(caller));
   }
 
   async listOrganization(
@@ -112,13 +123,254 @@ export class ReadingService {
       order: query.order,
       take: query.limit + 1,
     });
-    return this.toPage(rows, query.limit);
+    return this.toPage(rows, query.limit, await this.viewer(caller));
   }
 
   async listLatestPerTank(caller: JwtUser): Promise<ReadingLatestResponseDto> {
     const organizationId = this.requireOrganization(caller);
     const rows = await this.readingRepository.findLatestPerTank(organizationId);
-    return { items: rows.map(toReadingResponse) };
+    const viewer = await this.viewer(caller);
+    return { items: rows.map((row) => toReadingResponse(row, viewer)) };
+  }
+
+  async getOne(id: string, caller: JwtUser): Promise<ReadingResponseDto> {
+    const organizationId = this.requireOrganization(caller);
+    const reading = await this.readingRepository.findDetail(id);
+    if (
+      !reading ||
+      reading.deletedAt ||
+      reading.tank.organizationId !== organizationId
+    ) {
+      throw this.notFound();
+    }
+    if (
+      reading.createdById !== caller.userId &&
+      !(await this.permissionResolver.hasPermission(
+        caller.userId,
+        'reading:read-all',
+      ))
+    ) {
+      throw this.notFound();
+    }
+    return toReadingResponse(reading, await this.viewer(caller));
+  }
+
+  async correct(
+    id: string,
+    dto: UpdateReadingDto,
+    caller: JwtUser,
+  ): Promise<ReadingResponseDto> {
+    const organizationId = this.requireOrganization(caller);
+    const { changes, expectedUpdatedAt } = this.parseChanges(dto);
+
+    const reading = await this.readingRepository.findDetail(id);
+    if (
+      !reading ||
+      reading.deletedAt ||
+      reading.tank.organizationId !== organizationId
+    ) {
+      throw this.notFound();
+    }
+    if (reading.createdById !== caller.userId) throw this.notAuthor();
+
+    if (changes.tankId !== undefined && changes.tankId !== reading.tankId) {
+      const tank = await this.tankRepository.findById(changes.tankId);
+      if (!tank || tank.organizationId !== organizationId) {
+        throw new AppException(
+          HttpStatus.NOT_FOUND,
+          ErrorCode.TANK_NOT_FOUND,
+          'Tank not found',
+        );
+      }
+    }
+
+    const viewer = await this.viewer(caller);
+    if (this.isUnchanged(reading, changes)) {
+      return toReadingResponse(reading, viewer);
+    }
+    if (this.windowClosed(reading)) throw this.windowClosedError();
+    if (reading.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+      throw this.stale();
+    }
+
+    const done = await this.readingRepository.correct({
+      reading,
+      expectedUpdatedAt,
+      changedById: caller.userId,
+      changes,
+    });
+    const fresh = await this.readingRepository.findDetail(id);
+    if (!done || !fresh) throw this.stale();
+    return toReadingResponse(fresh, viewer);
+  }
+
+  async remove(id: string, caller: JwtUser): Promise<{ message: string }> {
+    const organizationId = this.requireOrganization(caller);
+    const reading = await this.readingRepository.findDetail(id);
+    if (!reading || reading.tank.organizationId !== organizationId) {
+      throw this.notFound();
+    }
+    if (reading.createdById !== caller.userId) {
+      throw reading.deletedAt ? this.notFound() : this.notAuthor();
+    }
+    if (reading.deletedAt) return { message: 'Reading deleted' };
+    if (this.windowClosed(reading)) throw this.windowClosedError();
+    await this.readingRepository.softDelete(reading, caller.userId);
+    return { message: 'Reading deleted' };
+  }
+
+  private async viewer(caller: JwtUser): Promise<ReadingViewer> {
+    return {
+      userId: caller.userId,
+      canCorrect: await this.permissionResolver.hasPermission(
+        caller.userId,
+        'reading:create',
+      ),
+      editWindowMs: this.editWindowMs,
+    };
+  }
+
+  private windowClosed(reading: ReadingDetail): boolean {
+    return Date.now() > reading.syncedAt.getTime() + this.editWindowMs;
+  }
+
+  private notFound() {
+    return new AppException(
+      HttpStatus.NOT_FOUND,
+      ErrorCode.READING_NOT_FOUND,
+      'Reading not found',
+    );
+  }
+
+  private notAuthor() {
+    return new AppException(
+      HttpStatus.FORBIDDEN,
+      ErrorCode.NOT_AUTHOR,
+      'Only the author can change a reading',
+    );
+  }
+
+  private windowClosedError() {
+    return new AppException(
+      HttpStatus.FORBIDDEN,
+      ErrorCode.EDIT_WINDOW_CLOSED,
+      'The correction window of this reading has closed',
+    );
+  }
+
+  private stale() {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      ErrorCode.STALE_READING,
+      'The reading changed since it was read; fetch it again',
+    );
+  }
+
+  private parseChanges(dto: UpdateReadingDto): {
+    changes: ReadingChanges;
+    expectedUpdatedAt: Date;
+  } {
+    const errors: FieldError[] = [];
+    const expectedUpdatedAt = this.parseBound(
+      'expectedUpdatedAt',
+      dto.expectedUpdatedAt,
+      errors,
+    );
+    const fields = [
+      'tankId',
+      'recordedAt',
+      'ph',
+      'temperatureC',
+      'salinityPpt',
+      'oxygenMgL',
+      'note',
+    ] as const;
+    if (fields.every((field) => dto[field] === undefined)) {
+      errors.push({ field: 'body', code: ErrorCode.REQUIRED });
+    }
+    this.checkLimits(dto, new Set(), errors);
+    const recordedAt =
+      dto.recordedAt === undefined
+        ? undefined
+        : this.checkRecordedAt(dto.recordedAt, errors);
+    if (errors.length > 0 || !expectedUpdatedAt) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.VALIDATION_FAILED,
+        'Validation failed',
+        errors,
+      );
+    }
+    const changes: ReadingChanges = {
+      tankId: dto.tankId,
+      recordedAt,
+      ph: dto.ph,
+      temperatureC: dto.temperatureC,
+      salinityPpt: dto.salinityPpt,
+      oxygenMgL: dto.oxygenMgL,
+      note: dto.note === undefined ? undefined : dto.note || null,
+    };
+    return { changes, expectedUpdatedAt };
+  }
+
+  // True when every field the client sent already holds that value.
+  private isUnchanged(reading: ReadingDetail, changes: ReadingChanges): boolean {
+    const recordedAt = changes.recordedAt as Date | undefined;
+    return (
+      (changes.tankId === undefined || changes.tankId === reading.tankId) &&
+      (recordedAt === undefined ||
+        recordedAt.getTime() === reading.recordedAt.getTime()) &&
+      (changes.ph === undefined || changes.ph === reading.ph) &&
+      (changes.temperatureC === undefined ||
+        changes.temperatureC === reading.temperatureC) &&
+      (changes.salinityPpt === undefined ||
+        changes.salinityPpt === reading.salinityPpt) &&
+      (changes.oxygenMgL === undefined ||
+        changes.oxygenMgL === reading.oxygenMgL) &&
+      (changes.note === undefined || changes.note === reading.note)
+    );
+  }
+
+  private checkLimits(
+    values: Partial<Record<keyof typeof READING_LIMITS, number>>,
+    failed: Set<string>,
+    errors: FieldError[],
+  ): void {
+    for (const [field, { min, max }] of Object.entries(READING_LIMITS)) {
+      const value = values[field as keyof typeof READING_LIMITS];
+      if (
+        value !== undefined &&
+        !failed.has(field) &&
+        (value < min || value > max)
+      ) {
+        errors.push({
+          field,
+          code: ErrorCode.OUT_OF_RANGE,
+          params: { min, max },
+        });
+      }
+    }
+  }
+
+  private checkRecordedAt(raw: string, errors: FieldError[]): Date | undefined {
+    const recordedAt = new Date(raw);
+    if (!RECORDED_AT_FORMAT.test(raw) || Number.isNaN(recordedAt.getTime())) {
+      errors.push({ field: 'recordedAt', code: ErrorCode.INVALID_DATETIME });
+    } else if (recordedAt < RECORDED_AT_FLOOR) {
+      errors.push({
+        field: 'recordedAt',
+        code: ErrorCode.OUT_OF_RANGE,
+        params: { min: RECORDED_AT_FLOOR.toISOString() },
+      });
+    } else if (recordedAt.getTime() > Date.now() + this.futureToleranceMs) {
+      errors.push({
+        field: 'recordedAt',
+        code: ErrorCode.RECORDED_AT_IN_FUTURE,
+      });
+    } else {
+      return recordedAt;
+    }
+    return undefined;
   }
 
   private requireOrganization(caller: JwtUser): string {
