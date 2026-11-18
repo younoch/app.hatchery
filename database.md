@@ -69,7 +69,7 @@ A user's effective permissions are the row matching `(user.organizationId, user.
 Unique: `[organizationId, name]` (it also serves lookups by organization, so there is no separate index). The foreign key to Organization is `Restrict`.
 
 ### Reading
-Immutable in the pilot.
+The author may correct or delete it inside the correction window (T27); every other change is refused.
 | field | type | required | default | notes |
 |---|---|---|---|---|
 | id | String | yes | - | Client UUID = primary key = idempotency key |
@@ -81,11 +81,30 @@ Immutable in the pilot.
 | oxygenMgL | Float | yes | - | |
 | note | String | no | - | Trimmed, max 200 chars. An empty note is stored as null |
 | recordedAt | DateTime | yes | - | From the client (ISO 8601 with a time zone). Not before 2020-01-01; more than 10 minutes in the future is rejected |
-| syncedAt | DateTime | yes | now() | Set by the server only |
+| syncedAt | DateTime | yes | now() | Set by the server only. Never changes: the correction window counts from it |
+| updatedAt | DateTime | yes | now() | When the reading was stored, and again on every correction (`max(now, previous + 1 ms)`). The client sends it back as `expectedUpdatedAt`. Rows from before T27 got `syncedAt` |
+| updatedById | String | no | - | FK to User, `Restrict`. The author who made the last correction |
+| deletedAt | DateTime | no | - | Soft delete. Deleted readings are hidden from every list and from `GET /readings/:id`; the id stays taken |
+| deletedById | String | no | - | FK to User, `Restrict` |
 
 Indexes: `[createdById, tankId, recordedAt]` (matches the frontend's local index; serves `GET /readings` with a tank filter) and `[createdById, recordedAt, id]` (serves `GET /readings` without one; read backwards for newest first). `[tankId, recordedAt, id]` serves the organization readings (`GET /readings/organization` and `/latest`, T26).
 Value limits (impossible values only) and the future-time limit are validated in the service; see `progress.md` → Readings sync.
-Deliberately absent in the pilot: `isLate`, `needsReview` (derive `isLate` from `syncedAt - recordedAt` later). The edit path and its audit rows (`updatedAt`, `updatedById`, `deletedAt`, `deletedById`, `ReadingRevision`) are planned in T27; this file is updated when the migration lands.
+Deliberately absent in the pilot: `isLate`, `needsReview` (derive `isLate` from `syncedAt - recordedAt` later). The relations of `Reading` to `User` are named (`ReadingCreatedBy`, `ReadingUpdatedBy`, `ReadingDeletedBy`) because there are three of them.
+
+### ReadingRevision
+The values a reading had before a correction or a delete (T27). Written in the same transaction as the change; no endpoint reads it yet.
+| field | type | required | default | notes |
+|---|---|---|---|---|
+| id | String | yes | uuid() | |
+| readingId | String | yes | - | FK to Reading, `Restrict` |
+| kind | ReadingRevisionKind | yes | - | `correction` or `delete` |
+| changedById | String | yes | - | FK to User, `Restrict` |
+| changedAt | DateTime | yes | now() | |
+| previousUpdatedAt | DateTime | yes | - | The `updatedAt` the reading had before the change |
+| previousTankId, previousRecordedAt, previousPh, previousTemperatureC, previousSalinityPpt, previousOxygenMgL | as the Reading fields | yes | - | The values before the change |
+| previousNote | String | no | - | |
+
+Index: `[readingId, changedAt]`. A request that changes nothing (the no-op `PATCH`) and a repeated `DELETE` write no row.
 
 ### EmailVerification
 | field | type | required | default | notes |
@@ -128,16 +147,19 @@ Dormant while `EMAIL_ENABLED=false`. onDelete Cascade.
 | field | type | required | default | notes |
 |---|---|---|---|---|
 | organizationId | String | yes | - | FK to Organization, `Cascade` |
-| resource | SyncResource | yes | - | `organization`, `tanks` or `organizationRoles` |
+| resource | SyncResource | yes | - | `organization`, `tanks`, `organizationRoles` or `readings` |
 | changedAt | DateTime | yes | - | Database clock, set inside the transaction of the write; strictly increasing per row (`GREATEST(clock, previous + 1 ms)`) |
 
-Primary key: `[organizationId, resource]`. One row per organization and resource, created by the first write; no row means "never written" and `GET /sync/state` answers `null`. Written only by `SyncMarkerRepository.touch`, called inside the write methods of `TankRepository`, `OrganizationRoleRepository` and `OrganizationRepository`.
+Primary key: `[organizationId, resource]`. One row per organization and resource, created by the first write; no row means "never written" and `GET /sync/state` answers `null`. Written only by `SyncMarkerRepository.touch`, called inside the write methods of `TankRepository`, `OrganizationRoleRepository`, `OrganizationRepository` and (T27) `ReadingRepository` (`correct`, `softDelete`; new readings do not move the `readings` marker).
 
 ### VerificationStatus (enum)
 PENDING, SENT, VERIFIED, EXPIRED.
 
 ### SyncResource (enum)
-organization, tanks, organizationRoles.
+organization, tanks, organizationRoles, readings.
+
+### ReadingRevisionKind (enum)
+correction, delete.
 
 ## Deleting users
 
@@ -184,6 +206,7 @@ Global roles `admin`, `manager`, `staff` with the default templates from `AGENTS
 | 20261113064432_add_reading_user_index | Reading index `[createdById, recordedAt, id]` (T23) |
 | 20261114174727_add_sync_markers | SyncResource and SyncMarker (T24) |
 | 20261117073441_add_reading_tank_index | Reading index `[tankId, recordedAt, id]` (T26) |
+| 20261117203430_add_reading_corrections | Reading `updatedAt` (backfilled from `syncedAt`), `updatedById`, `deletedAt`, `deletedById`; table `ReadingRevision`; `SyncResource.readings` (T27) |
 
 Add a row here after each migration is run (the folder name carries a timestamp).
 

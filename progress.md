@@ -4,7 +4,7 @@
 
 Implemented (T2–T18): login by username (httpOnly refresh cookie with rotation, grace window, single session with takeover), password change and admin-driven password reset, organizations with their admin (and admin transfer), per-organization role rows and their editing by the org admin, user management (list, create, update, deactivate, reset password, delete), tanks (list, create, rename, deactivate), offline readings sync (`POST /readings/sync`), the admin-action log, the error-code contract, per-route rate limits, RBAC with a DB-only super admin, pagination, response envelope, health checks, pino logging, Swagger response schemas. Email features (verification, forgot/reset password) exist but answer 503 `email_disabled` while `EMAIL_ENABLED=false`.
 
-Not implemented (marked **planned** below): corrections of synced readings (T27), the deployment guide (T20b), nightly backups (T20c).
+Not implemented (marked **planned** below): the deployment guide (T20b), nightly backups (T20c).
 
 Known bugs today:
 
@@ -49,7 +49,7 @@ Recommended build order is the numeric order. "Docs first": each task updates it
 | T24 | `GET /sync/state` (F→B-31): one change marker per resource (`organization`, `tanks`, `organizationRoles`) kept in a new `SyncMarker` table and bumped in the same transaction as every write, deletes included; response DTO, errors and `openapi.json` as usual | done | T21b |
 | T25 | Permission keys in `openapi.json` (F→B-32 point 2): the `permissions` fields of `PATCH /organization-roles/:id` and of its answers become an enum of the organization-level keys with a description of each key (`x-enumDescriptions`), built from `PERMISSION_MAP` so they cannot drift; `openapi.json` regenerated | done | T21b |
 | T26 | Organization readings (F→B-33 A): `GET /readings/organization` and `GET /readings/organization/latest` behind `reading:read-all`; `createdBy` on every reading shape (also in `GET /readings`); `order` and `limit` up to 500; new index `[tankId, recordedAt, id]`; `openapi.json` as usual | done | T23 |
-| T27 | Corrections (F→B-33 B): `GET`, `PATCH` and `DELETE /readings/{id}`; `Reading` gets `updatedAt`, `updatedById`, `deletedAt`, `deletedById`, new table `ReadingRevision`; `updatedAt` and `editableUntil` on every reading; window `READING_EDIT_WINDOW_HOURS`; error codes `reading_not_found`, `not_author`, `edit_window_closed`, `stale_reading`; marker `readings` in `GET /sync/state`; README env table | not started | T26 |
+| T27 | Corrections (F→B-33 B): `GET`, `PATCH` and `DELETE /readings/{id}`; `Reading` gets `updatedAt`, `updatedById`, `deletedAt`, `deletedById`, new table `ReadingRevision`; `updatedAt` and `editableUntil` on every reading; window `READING_EDIT_WINDOW_HOURS`; error codes `reading_not_found`, `not_author`, `edit_window_closed`, `stale_reading`; marker `readings` in `GET /sync/state`; README env table | done | T26 |
 
 
 ## API contract
@@ -80,13 +80,13 @@ Responses use the envelope `{ success, statusCode, data, timestamp }`. "Status":
 | `POST /tanks`, `PATCH /tanks/:id` | `tank:create`, `tank:write` | `{ name, organizationId? }` (`organizationId` is required for the super admin); `{ name?, isActive? }` (at least one) | the tank, same shape as a list item | implemented (T14). `name` is trimmed, 1–50 characters, unique within the organization ignoring case: a duplicate is 409 `tank_name_taken`. `PATCH` with no field: 400 `bad_request`. An inactive tank can still be renamed. A tank of another organization: 404 `tank_not_found` |
 | `POST /readings/sync` | `reading:create` | see below | see below | implemented (T15) |
 | `GET /readings` | any organization member | `tankId?`, `from?`, `to?`, `limit?`, `cursor?` | `{ items, nextCursor }` | implemented (T23); see Own readings below |
-| `GET /sync/state` | any organization member | none | `{ organization, tanks, organizationRoles }` (opaque timestamps; T27 adds `readings`) | implemented (T24); see Change markers below |
+| `GET /sync/state` | any organization member | none | `{ organization, tanks, organizationRoles, readings }` (opaque timestamps; `readings` since T27) | implemented (T24, T27); see Change markers below |
 | `GET /health` | none | — | `{ status, info, error, details }` | implemented |
 | `GET /readings/organization` | `reading:read-all` | `tankId?`, `userId?`, `from?`, `to?`, `order?`, `limit?`, `cursor?` | `{ items, nextCursor }`, every item with `createdBy` | implemented (T26); see Organization readings below |
 | `GET /readings/organization/latest` | `reading:read-all` | none | `{ items }`: the newest reading of each tank | implemented (T26) |
-| `GET /readings/:id` | the author, or `reading:read-all` | none | the reading | planned (T27); see Corrections below |
-| `PATCH /readings/:id` | `reading:create`, author only | `{ expectedUpdatedAt, tankId?, recordedAt?, ph?, temperatureC?, salinityPpt?, oxygenMgL?, note? }` | the reading | planned (T27) |
-| `DELETE /readings/:id` | `reading:create`, author only | none | `{ message }` | planned (T27) |
+| `GET /readings/:id` | the author, or `reading:read-all` | none | the reading | implemented (T27); see Corrections below |
+| `PATCH /readings/:id` | `reading:create`, author only | `{ expectedUpdatedAt, tankId?, recordedAt?, ph?, temperatureC?, salinityPpt?, oxygenMgL?, note? }` | the reading | implemented (T27) |
+| `DELETE /readings/:id` | `reading:create`, author only | none | `{ message }` | implemented (T27) |
 
 **User shape** (T11a): `{ id, username, email, name, isActive, mustChangePassword, organizationId, role: { id, name } | null, createdAt }`. The role carries no permissions: the global role's list is only a template, the real permissions are per organization.
 
@@ -174,7 +174,7 @@ Both endpoints need `reading:read-all` (403 `permission_denied` without it) and 
 
 `GET /readings/organization/latest` — no query. Answer `data`: `{ items }`, the newest reading of each tank of the organization that has at least one reading (tanks without readings are absent; inactive tanks are included, match by `tankId` against `GET /tanks`). No order is promised. No min/max/average summary is provided: the client computes it from the list.
 
-Every reading in these two answers and in `GET /readings` has the shape `{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxygenMgL, note, syncedAt, createdBy: { id, username, name } }` (`name` is null when the user has none). T27 adds `updatedAt` and `editableUntil` to it.
+Every reading in these two answers and in `GET /readings` has the shape `{ id, tankId, recordedAt, ph, temperatureC, salinityPpt, oxygenMgL, note, syncedAt, createdBy: { id, username, name }, updatedAt, editableUntil }` (`name` is null when the user has none; `updatedAt` and `editableUntil` since T27, see Corrections).
 
 ### Corrections (T27)
 
@@ -184,9 +184,9 @@ Window: `READING_EDIT_WINDOW_HOURS` (default 24) counted from `syncedAt` (the se
 
 Reading shape, from T27: the T26 shape plus `updatedAt` (when the reading was stored, and again on every correction) and `editableUntil`.
 
-`GET /readings/:id` — the author, or a holder of `reading:read-all` of the same organization. Anything else, a deleted reading or a reading of another organization: 404 `reading_not_found`. Its purpose is to fetch the current state after a 409.
+`GET /readings/:id` — the author, or a holder of `reading:read-all` of the same organization. Anything else, a deleted reading or a reading of another organization: 404 `reading_not_found`. Its purpose is to fetch the current state after a 409. The organization's `admin` holds every organization key, so he can read any reading of the organization, but only the author can change one.
 
-`PATCH /readings/:id` — needs `reading:create`. Body: `expectedUpdatedAt` (required, ISO 8601 with a time zone: the `updatedAt` the client holds) and at least one of `tankId`, `recordedAt`, `ph`, `temperatureC`, `salinityPpt`, `oxygenMgL`, `note` (`null` clears the note). The value rules are those of a sync item: the hard limits, `recordedAt` not before 2020-01-01 and not more than `READING_FUTURE_TOLERANCE_MS` ahead, `note` up to 200 characters, `tankId` a tank of the organization (404 `tank_not_found`; an inactive tank is accepted). Fields such as `id`, `createdById`, `syncedAt`, `updatedAt` are refused (400 `validation_failed`, `not_allowed`). Checks in this order: 400 `validation_failed` (field `errors` as in `POST /readings/sync`); 404 `reading_not_found`; 403 `not_author`; if every sent field already holds the sent value, 200 with the current reading and nothing changes (so repeating a request is harmless, and it skips the next two checks); 403 `edit_window_closed`; 409 `stale_reading` when `expectedUpdatedAt` differs from the stored `updatedAt`. Then the row is updated (`updatedAt`, `updatedById`), the previous values go to a `ReadingRevision` row, and the `readings` marker moves, in one transaction. Answer: the updated reading.
+`PATCH /readings/:id` — needs `reading:create`. Body: `expectedUpdatedAt` (required, ISO 8601 with a time zone: the `updatedAt` the client holds) and at least one of `tankId`, `recordedAt`, `ph`, `temperatureC`, `salinityPpt`, `oxygenMgL`, `note` (`null` clears the note). The value rules are those of a sync item: the hard limits, `recordedAt` not before 2020-01-01 and not more than `READING_FUTURE_TOLERANCE_MS` ahead, `note` up to 200 characters, `tankId` a tank of the organization (404 `tank_not_found`; an inactive tank is accepted). Fields such as `id`, `createdById`, `syncedAt`, `updatedAt` are refused (400 `validation_failed`, `not_allowed`). A body with `expectedUpdatedAt` and no other field: 400 `validation_failed`, `errors: [{ field: "body", code: "required" }]`. A malformed `expectedUpdatedAt`: `invalid_datetime`. Checks in this order: 400 `validation_failed` (field `errors` as in `POST /readings/sync`); 404 `reading_not_found`; 403 `not_author`; 404 `tank_not_found` when `tankId` differs from the stored one and is not a tank of the organization; if every sent field already holds the sent value, 200 with the current reading and nothing changes (so repeating a request is harmless, and it skips the next two checks); 403 `edit_window_closed`; 409 `stale_reading` when `expectedUpdatedAt` differs from the stored `updatedAt`. Then the row is updated (`updatedAt`, `updatedById`), the previous values go to a `ReadingRevision` row, and the `readings` marker moves, in one transaction. Answer: the updated reading.
 
 `DELETE /readings/:id` — needs `reading:create`, no body, no `expectedUpdatedAt`: deleting means "remove whatever is stored". Soft delete (`deletedAt`, `deletedById`), the previous values go to a `ReadingRevision` row, the `readings` marker moves. Checks: 404 `reading_not_found`, 403 `not_author`, 403 `edit_window_closed`. Answer `{ message }`. A repeated `DELETE` of an already deleted reading by its author answers 200; anyone else gets 404.
 
@@ -264,7 +264,10 @@ Field staff often share one public IP, so authenticated traffic is never limited
 | `org_admin_protected` | 409 | action not allowed on the organization's admin (deactivate, delete, role change) |
 | `cannot_target_self` | 409 | cannot delete, deactivate, change the role of, or reset the password of yourself |
 | `username_taken`, `email_taken`, `tank_name_taken`, `conflict` | 409 | uniqueness or foreign-key conflict |
-| `not_found`, `tank_not_found` | 404 | missing or outside your organization |
+| `not_found`, `tank_not_found`, `reading_not_found` | 404 | missing or outside your organization (`reading_not_found`: also a deleted reading, and a reading of someone else for a caller without `reading:read-all`) |
+| `not_author` | 403 | only the author may correct or delete a reading |
+| `edit_window_closed` | 403 | the correction window (`READING_EDIT_WINDOW_HOURS` from `syncedAt`) has passed |
+| `stale_reading` | 409 | `expectedUpdatedAt` is not the stored `updatedAt`; fetch the reading again with `GET /readings/:id` |
 | `id_conflict`, `recorded_at_in_future` | item level (sync) | see Readings sync |
 | `email_disabled` | 503 | email features are switched off |
 | `rate_limited` | 429 | throttled; the response has a `Retry-After` header (seconds), exposed through CORS |
@@ -317,6 +320,7 @@ Field staff often share one public IP, so authenticated traffic is never limited
 * 2026-11-14: T25. The nine organization-level keys are one named schema, `OrgPermissionKey`, referenced by the five permission lists (`UpdateOrganizationRoleDto`, `OrganizationRoleResponseDto`, `CreateRoleDto`, `UpdateRoleDto`, `RoleResponseDto`). Descriptions live in `ORG_PERMISSION_DESCRIPTIONS` (typed `Record<OrgPermission, string>`, so a new key without a description does not compile) and are added to the schema in `buildOpenApiDocument`. `MeResponseDto.permissions` stays `string[]`.
 * 2026-11-17: F→B-33. The owner chose corrections: the author edits or deletes his own reading until a server-set time (T27); open decision 3 (`ReadingAudit` + PATCH) is closed. Window = `READING_EDIT_WINDOW_HOURS` (default 24) from `syncedAt`, not extended by a correction; the server returns `editableUntil`. Optimistic lock: `expectedUpdatedAt` on `PATCH` (409 `stale_reading`), none on `DELETE`; a repeated identical `PATCH` is a 200 no-op. Soft delete; the previous values of every correction go to `ReadingRevision` (no endpoint reads it yet). Other phones learn of corrections through the `readings` marker (not moved by new readings); `updatedAfter`/tombstones are parked. Organization readings (T26) are a separate path behind `reading:read-all`, `limit` up to 500, `order`, `userId`, plus `/latest`; no server-side min/max/average.
 * 2026-11-17: T26 released. One keyset rule serves the own and the organization lists (`pageWhere` in `ReadingRepository`; "after" means later for `asc`, earlier for `desc`). `/latest` uses `DISTINCT ON (tankId)` in SQL, not Prisma's `distinct` (which can load every row), plus a second query for `createdBy`; T27 adds `deletedAt IS NULL` to it. `createdBy` is on every reading in both lists, so the frontend has one shape.
+* 2026-11-18: T27 released. The correction is an optimistic update in one transaction: `updateMany` with `updatedAt = expectedUpdatedAt AND deletedAt IS NULL` decides the winner (a lost race is 409 `stale_reading`), then the previous values go to `ReadingRevision` and the `readings` marker moves. The window is measured from `syncedAt` (a stored `timestamp`, UTC) and the check runs after the no-op check, so repeating a request after the window closed is still 200. `updatedAt` is `max(now, previous + 1 ms)`, so two corrections never share a value. A deleted id stays taken: syncing it again answers `duplicate`. `PATCH` and `DELETE` have their own throttlers (30 per minute per user each, matched by method and path). Revision rows have no read endpoint yet (parking lot).
 
 ## Open decisions
 
