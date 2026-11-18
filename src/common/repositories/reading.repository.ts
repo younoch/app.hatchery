@@ -23,10 +23,15 @@ export type ReadingDetail = Prisma.ReadingGetPayload<{
   include: typeof READING_DETAIL;
 }>;
 
-export type ReadingChanges = Pick<
-  Prisma.ReadingUncheckedUpdateManyInput,
-  'tankId' | 'recordedAt' | 'ph' | 'temperatureC' | 'salinityPpt' | 'oxygenMgL' | 'note'
->;
+export interface ReadingChanges {
+  tankId?: string;
+  recordedAt?: Date;
+  ph?: number;
+  temperatureC?: number;
+  salinityPpt?: number;
+  oxygenMgL?: number;
+  note?: string | null;
+}
 
 interface PageParams {
   from?: Date;
@@ -98,7 +103,11 @@ export class ReadingRepository {
         Math.max(Date.now(), reading.updatedAt.getTime() + 1),
       );
       const result = await tx.reading.updateMany({
-        where: { id: reading.id, updatedAt: expectedUpdatedAt, deletedAt: null },
+        where: {
+          id: reading.id,
+          updatedAt: expectedUpdatedAt,
+          deletedAt: null,
+        },
         data: { ...changes, updatedAt, updatedById: changedById },
       });
       if (result.count === 0) return false;
@@ -153,9 +162,7 @@ export class ReadingRepository {
     return this.prisma.reading.findUnique({ where: { id } });
   }
 
-  findPageForUser(
-    params: PageParams & { userId: string; tankId?: string },
-  ) {
+  findPageForUser(params: PageParams & { userId: string; tankId?: string }) {
     const { userId, tankId, take, ...page } = params;
     return this.prisma.reading.findMany({
       where: pageWhere(

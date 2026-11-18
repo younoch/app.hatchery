@@ -72,7 +72,7 @@ export class ReadingService {
       configService.getOrThrow<number>('READING_EDIT_WINDOW_HOURS') * 3_600_000;
   }
 
-    async list(
+  async list(
     query: ListReadingsQueryDto,
     caller: JwtUser,
   ): Promise<ReadingListResponseDto> {
@@ -314,7 +314,10 @@ export class ReadingService {
   }
 
   // True when every field the client sent already holds that value.
-  private isUnchanged(reading: ReadingDetail, changes: ReadingChanges): boolean {
+  private isUnchanged(
+    reading: ReadingDetail,
+    changes: ReadingChanges,
+  ): boolean {
     const recordedAt = changes.recordedAt as Date | undefined;
     return (
       (changes.tankId === undefined || changes.tankId === reading.tankId) &&
@@ -410,11 +413,12 @@ export class ReadingService {
   private toPage(
     rows: ReadingWithAuthor[],
     limit: number,
+    viewer: ReadingViewer,
   ): ReadingListResponseDto {
     const items = rows.slice(0, limit);
     const last = items[items.length - 1];
     return {
-      items: items.map(toReadingResponse),
+      items: items.map((row) => toReadingResponse(row, viewer)),
       nextCursor: rows.length > limit && last ? this.encodeCursor(last) : null,
     };
   }
@@ -537,37 +541,11 @@ export class ReadingService {
     );
     const failed = new Set(errors.map((error) => error.field));
 
-    for (const [field, { min, max }] of Object.entries(READING_LIMITS)) {
-      const value = dto[field as keyof typeof READING_LIMITS];
-      if (!failed.has(field) && (value < min || value > max)) {
-        errors.push({
-          field,
-          code: ErrorCode.OUT_OF_RANGE,
-          params: { min, max },
-        });
-      }
-    }
+    this.checkLimits(dto, failed, errors);
 
     let recordedAt = new Date(NaN);
     if (!failed.has('recordedAt')) {
-      recordedAt = new Date(dto.recordedAt);
-      if (
-        !RECORDED_AT_FORMAT.test(dto.recordedAt) ||
-        Number.isNaN(recordedAt.getTime())
-      ) {
-        errors.push({ field: 'recordedAt', code: ErrorCode.INVALID_DATETIME });
-      } else if (recordedAt < RECORDED_AT_FLOOR) {
-        errors.push({
-          field: 'recordedAt',
-          code: ErrorCode.OUT_OF_RANGE,
-          params: { min: RECORDED_AT_FLOOR.toISOString() },
-        });
-      } else if (recordedAt.getTime() > Date.now() + this.futureToleranceMs) {
-        errors.push({
-          field: 'recordedAt',
-          code: ErrorCode.RECORDED_AT_IN_FUTURE,
-        });
-      }
+      recordedAt = this.checkRecordedAt(dto.recordedAt, errors) ?? recordedAt;
     }
 
     if (errors.length > 0) return { errors };
