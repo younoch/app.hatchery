@@ -18,6 +18,28 @@ export class SyncResultDto {
   })
   identical?: boolean;
 
+  @ApiPropertyOptional({
+    format: 'date-time',
+    description:
+      'Only on created and duplicate: UTC; when the reading was stored, and again on every correction',
+  })
+  updatedAt?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description:
+      'Only on created and duplicate: UTC; the end of the author correction window (may lie in the past); null for a deleted reading',
+  })
+  editableUntil?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Only on duplicate: the stored reading was deleted; drop the local copy',
+  })
+  deleted?: boolean;
+
   @ApiPropertyOptional({ type: () => FieldErrorDto, isArray: true })
   errors?: FieldErrorDto[];
 }

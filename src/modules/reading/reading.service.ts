@@ -45,6 +45,9 @@ export interface SyncResult {
   id?: string;
   status: 'created' | 'duplicate' | 'rejected';
   identical?: boolean;
+  updatedAt?: string;
+  editableUntil?: string | null;
+  deleted?: boolean;
   errors?: FieldError[];
 }
 
@@ -584,7 +587,13 @@ export class ReadingService {
         recordedAt: item.recordedAt,
       });
       known.set(created.id, created);
-      return { index, id: dto.id, status: 'created' };
+      return {
+        index,
+        id: dto.id,
+        status: 'created',
+        updatedAt: created.updatedAt.toISOString(),
+        editableUntil: this.editableUntil(created),
+      };
     } catch (error) {
       // Two requests with the same id at once: the primary key lets one win.
       if (
@@ -618,7 +627,23 @@ export class ReadingService {
       existing.salinityPpt === dto.salinityPpt &&
       existing.oxygenMgL === dto.oxygenMgL &&
       existing.note === item.note;
-    return { index, id: dto.id, status: 'duplicate', identical };
+    return {
+      index,
+      id: dto.id,
+      status: 'duplicate',
+      identical,
+      updatedAt: existing.updatedAt.toISOString(),
+      editableUntil: this.editableUntil(existing),
+      deleted: existing.deletedAt !== null,
+    };
+  }
+
+  // The author's own deadline; none for a deleted reading.
+  private editableUntil(reading: Reading): string | null {
+    if (reading.deletedAt) return null;
+    return new Date(
+      reading.syncedAt.getTime() + this.editWindowMs,
+    ).toISOString();
   }
 
   private rejected(
